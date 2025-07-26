@@ -1,53 +1,75 @@
 # FitFlow System Architecture
 
 ## Overview
-FitFlow is designed as a multi-tenant SaaS platform supporting wellness trainers who work across multiple studios. Built using microservices architecture to support multi-studio management and future scalability. The architecture prioritizes security, scalability, and HIPAA compliance.
+FitFlow is designed as a multi-tenant SaaS platform supporting wellness trainers who work across multiple studios. Built using microservices architecture on Oracle Cloud Infrastructure (OCI) Free Tier to support multi-studio management and future scalability. The architecture prioritizes security, scalability, and HIPAA compliance.
+
+## Infrastructure Stack (OCI Free Tier)
+
+### Compute Resources
+- **Primary Server**: OCI ARM VM (4 OCPU, 24GB RAM, 50GB storage)
+- **OS**: Ubuntu 22.04 LTS with CloudPanel
+- **Process Manager**: PM2 for Node.js clustering
+- **Web Server**: Nginx (CloudPanel managed)
+
+### Data Layer
+- **Database**: OCI Autonomous Database (20GB, auto-scaling)
+- **Cache**: Redis 7 (CloudPanel integrated)
+- **Object Storage**: OCI Object Storage (20GB, S3-compatible)
+
+### Network & Security
+- **Load Balancer**: OCI Load Balancer (10 Mbps)
+- **SSL**: Let's Encrypt via CloudPanel
+- **Domain**: test.fitflow.example.com
 
 ## High-Level Architecture
 
-### Microservices Architecture
+### Microservices on CloudPanel
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Client Layer                             │
 ├─────────────────────┬─────────────────────┬────────────────────┤
-│   Trainer Web App   │   Studio Portal     │   Mobile App       │
-│   (React/Next.js)   │   (React/Next.js)   │   (React Native)   │
+│   Trainer Web App   │   Client Portal     │   Mobile PWA       │
+│   (React/Next.js)   │   (React/Next.js)   │   (React/Next.js)  │
 └─────────────────────┴─────────────────────┴────────────────────┘
                                 │
-                                │ HTTPS/CloudFlare CDN
+                                │ HTTPS/Let's Encrypt
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│               API Gateway (Kong/nginx) - Docker                  │
-│                    - Rate Limiting                               │
+│               Nginx Reverse Proxy (CloudPanel)                   │
 │                    - SSL Termination                             │
+│                    - Rate Limiting                               │
 │                    - Load Balancing                              │
-│                    - Service Discovery                           │
+│                    - Path-based Routing                          │
 └─────────────────────────────────────────────────────────────────┘
                                 │
                     ┌───────────┼───────────┐
                     │           │           │
                     ▼           ▼           ▼
 ┌──────────────────────┬──────────────────┬──────────────────────┐
-│   Auth Service       │  User Service    │  Scheduling Service  │
-│   - JWT Auth         │  - Trainers      │  - Appointments      │
-│   - OAuth2           │  - Clients       │  - Calendar          │
-│   - RBAC             │  - Teams         │  - Availability      │
-│   [Docker Container] │ [Docker Container]│ [Docker Container]   │
+│   Auth Service       │  Payment Service │ Notification Service │
+│   - JWT/Passkeys     │  - Stripe API    │  - Email (SMTP)      │
+│   - WebAuthn         │  - Subscriptions │  - SMS (Twilio)      │
+│   - Client Auth      │  - Refunds       │  - AI Summaries      │
+│   [PM2 Port: 3001]   │ [PM2 Port: 3002] │ [PM2 Port: 3003]     │
 └──────────────────────┴──────────────────┴──────────────────────┘
                     │           │           │
                     ▼           ▼           ▼
 ┌──────────────────────┬──────────────────┬──────────────────────┐
-│  Session Service     │ Financial Service│  Studio Service      │
-│  - Notes             │  - Invoicing     │  - Multi-studio      │
-│  - Training Plans    │  - Payments      │  - Portal Access     │
-│  - AI Summaries      │  - Tax Mgmt      │  - Billing           │
-│  [Docker Container]  │ [Docker Container]│ [Docker Container]   │
+│  Trainer Service     │  Client Service  │  Studio Service      │
+│  - Sessions/Notes    │  - Profiles      │  - Multi-location    │
+│  - Scheduling        │  - Privacy Mgmt  │  - Manager Roles     │
+│  - Availability      │  - History       │  - Delegations       │
+│  [PM2 Port: 3004]    │ [PM2 Port: 3005] │ [PM2 Port: 3006]     │
 └──────────────────────┴──────────────────┴──────────────────────┘
                     │           │           │
                     ▼           ▼           ▼
-┌──────────────────────┬──────────────────┬──────────────────────┐
-│ Notification Service │ Analytics Service│  Storage Service     │
-│  - Email             │  - Reports       │  - S3 Interface      │
+┌─────────────────────────────────────────────────────────────────┐
+│                     Shared Data Layer                            │
+├──────────────────────┬──────────────────┬──────────────────────┤
+│  OCI Autonomous DB   │  Redis Cache     │  OCI Object Storage  │
+│  - Oracle 19c        │  - Sessions      │  - S3-Compatible     │
+│  - 20GB Storage      │  - Queues        │  - 20GB Free         │
+│  - Auto-scaling      │  - WebAuthn      │  - CDN Ready         │
 │  - SMS               │  - BI            │  - Document Mgmt     │
 │  - Push              │  - Dashboards    │  - Image Upload      │
 │  [Docker Container]  │ [Docker Container]│ [Docker Container]   │
