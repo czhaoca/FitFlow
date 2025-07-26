@@ -90,15 +90,55 @@ module.exports = {
    - `refactor/description` - Code refactoring
    - `docs/description` - Documentation
 
-2. **Commit Messages**:
-   - Use conventional commits: `type(scope): description`
-   - Types: feat, fix, docs, style, refactor, test, chore
+2. **Commit Message Convention**:
+   - Follow [Conventional Commits](https://www.conventionalcommits.org/)
+   - Format: `type(scope): description`
+   - Types:
+     - `feat`: New feature
+     - `fix`: Bug fix
+     - `docs`: Documentation changes
+     - `style`: Code style changes (formatting, semicolons, etc)
+     - `refactor`: Code refactoring
+     - `test`: Adding or updating tests
+     - `chore`: Maintenance tasks
+     - `perf`: Performance improvements
+     - `ci`: CI/CD changes
+   - Examples:
+     - `feat(auth): add OAuth2 integration`
+     - `fix(scheduling): resolve timezone conversion bug`
+     - `docs(api): update endpoint documentation`
    - Keep commits atomic and focused
 
 3. **Pull Requests**:
    - Must pass all tests
    - Require code review
    - Update documentation as needed
+
+### Change Log Management
+Each development session/conversation should be documented in the CHANGELOG.md file:
+
+1. **Session Documentation**:
+   ```markdown
+   ## [Session Date] - YYYY-MM-DD
+   
+   ### Added
+   - List of features added
+   
+   ### Changed
+   - List of changes made
+   
+   ### Fixed
+   - List of bugs fixed
+   
+   ### Conversation ID
+   - Reference to the conversation/session ID
+   ```
+
+2. **Iteration Tracking**:
+   - Every significant change should be logged
+   - Include conversation context
+   - Reference commit hashes
+   - Document decision rationale
 
 ### CI/CD Pipeline
 ```yaml
