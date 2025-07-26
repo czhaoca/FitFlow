@@ -1,14 +1,17 @@
 # FitFlow Database Schema Design
 
 ## Overview
-The database is designed with multi-tenancy, HIPAA compliance, and future scalability in mind. We use PostgreSQL with row-level security and encryption at rest.
+The database is designed with multi-tenancy, HIPAA compliance, and future scalability in mind. We use PostgreSQL with row-level security and encryption at rest. The schema is compatible with OCI Autonomous Database and standard PostgreSQL deployments with AWS RDS-compatible APIs.
 
 ## Core Design Principles
 1. **Multi-tenancy**: Trainer-based isolation with shared studios
-2. **Audit Trail**: All changes tracked with timestamps and user IDs
-3. **Soft Deletes**: Data marked as deleted, not physically removed
-4. **HIPAA Compliance**: Encrypted PII and PHI fields
-5. **Extensibility**: JSONB fields for flexible metadata
+2. **Multi-Studio Support**: Owners can manage multiple studio locations
+3. **Audit Trail**: All changes tracked with timestamps and user IDs
+4. **Soft Deletes**: Data marked as deleted, not physically removed
+5. **HIPAA Compliance**: Encrypted PII and PHI fields
+6. **Extensibility**: JSONB fields for flexible metadata
+7. **Cloud Compatibility**: AWS RDS-compatible, no vendor-specific features
+8. **OCI Optimization**: Designed for OCI Autonomous Database performance
 
 ## Schema Diagrams
 
@@ -45,9 +48,11 @@ CREATE TABLE trainers (
     settings JSONB DEFAULT '{}'::JSONB
 );
 
--- Studios table
+-- Studios table (supports multi-location ownership)
 CREATE TABLE studios (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    parent_studio_id UUID REFERENCES studios(id), -- For chain/franchise support
+    owner_id UUID REFERENCES users(id), -- Studio owner account
     name VARCHAR(255) NOT NULL,
     business_number VARCHAR(100),
     address JSONB NOT NULL, -- {street, city, province, postal_code, country}
@@ -56,6 +61,8 @@ CREATE TABLE studios (
     tax_rates JSONB, -- {gst, pst, hst}
     bank_account_info JSONB, -- Encrypted
     settings JSONB DEFAULT '{}'::JSONB,
+    is_headquarters BOOLEAN DEFAULT FALSE,
+    billing_consolidated BOOLEAN DEFAULT TRUE, -- For multi-location billing
     status VARCHAR(50) DEFAULT 'active',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

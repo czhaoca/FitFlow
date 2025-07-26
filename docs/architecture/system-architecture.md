@@ -1,10 +1,11 @@
 # FitFlow System Architecture
 
 ## Overview
-FitFlow is designed as a multi-tenant SaaS platform supporting wellness trainers who work across multiple studios. The architecture prioritizes security, scalability, and HIPAA compliance.
+FitFlow is designed as a multi-tenant SaaS platform supporting wellness trainers who work across multiple studios. Built using microservices architecture to support multi-studio management and future scalability. The architecture prioritizes security, scalability, and HIPAA compliance.
 
 ## High-Level Architecture
 
+### Microservices Architecture
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Client Layer                             │
@@ -13,35 +14,102 @@ FitFlow is designed as a multi-tenant SaaS platform supporting wellness trainers
 │   (React/Next.js)   │   (React/Next.js)   │   (React Native)   │
 └─────────────────────┴─────────────────────┴────────────────────┘
                                 │
-                                │ HTTPS
+                                │ HTTPS/CloudFlare CDN
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      API Gateway (nginx)                         │
+│               API Gateway (Kong/nginx) - Docker                  │
 │                    - Rate Limiting                               │
 │                    - SSL Termination                             │
 │                    - Load Balancing                              │
+│                    - Service Discovery                           │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                    ┌───────────┼───────────┐
+                    │           │           │
+                    ▼           ▼           ▼
+┌──────────────────────┬──────────────────┬──────────────────────┐
+│   Auth Service       │  User Service    │  Scheduling Service  │
+│   - JWT Auth         │  - Trainers      │  - Appointments      │
+│   - OAuth2           │  - Clients       │  - Calendar          │
+│   - RBAC             │  - Teams         │  - Availability      │
+│   [Docker Container] │ [Docker Container]│ [Docker Container]   │
+└──────────────────────┴──────────────────┴──────────────────────┘
+                    │           │           │
+                    ▼           ▼           ▼
+┌──────────────────────┬──────────────────┬──────────────────────┐
+│  Session Service     │ Financial Service│  Studio Service      │
+│  - Notes             │  - Invoicing     │  - Multi-studio      │
+│  - Training Plans    │  - Payments      │  - Portal Access     │
+│  - AI Summaries      │  - Tax Mgmt      │  - Billing           │
+│  [Docker Container]  │ [Docker Container]│ [Docker Container]   │
+└──────────────────────┴──────────────────┴──────────────────────┘
+                    │           │           │
+                    ▼           ▼           ▼
+┌──────────────────────┬──────────────────┬──────────────────────┐
+│ Notification Service │ Analytics Service│  Storage Service     │
+│  - Email             │  - Reports       │  - S3 Interface      │
+│  - SMS               │  - BI            │  - Document Mgmt     │
+│  - Push              │  - Dashboards    │  - Image Upload      │
+│  [Docker Container]  │ [Docker Container]│ [Docker Container]   │
+└──────────────────────┴──────────────────┴──────────────────────┘
+                                │
+                    ┌───────────┼───────────┐
+                    │           │           │
+                    ▼           ▼           ▼
+┌──────────────────────┬──────────────────┬──────────────────────┐
+│      PostgreSQL      │      Redis       │   OCI Object Store   │
+│   - Multi-tenant     │  - Cache         │   - S3 Compatible    │
+│   - Encrypted        │  - Queue (Bull)  │   - Documents        │
+│   - AWS RDS Compat   │  - Sessions      │   - Backups          │
+└──────────────────────┴──────────────────┴──────────────────────┘
+```
+
+### Deployment Infrastructure (OCI)
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    OCI Load Balancer                             │
 └─────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                     Application Layer                            │
-├─────────────────────┬─────────────────────┬────────────────────┤
-│   Auth Service      │   Core API          │   Reporting Service│
-│   - JWT Auth        │   - Scheduling      │   - PDF Generation │
-│   - RBAC           │   - CRM             │   - Analytics      │
-│   - Session Mgmt    │   - Billing         │   - Export         │
-└─────────────────────┴─────────────────────┴────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      Data Layer                                  │
-├─────────────────────┬─────────────────────┬────────────────────┤
-│   PostgreSQL        │   Redis             │   S3 Storage       │
-│   - Encrypted       │   - Session Cache   │   - Documents      │
-│   - Multi-tenant    │   - Rate Limiting   │   - Invoices       │
-│   - Audit Logs      │   - Queue           │   - Backups        │
-└─────────────────────┴─────────────────────┴────────────────────┘
+│              OCI ARM VM (Ubuntu 22.04 LTS)                      │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │               Docker & Docker Compose                     │   │
+│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐    │   │
+│  │  │Gateway  │  │  Auth   │  │  User   │  │Schedule │    │   │
+│  │  │Container│  │Container│  │Container│  │Container│... │   │
+│  │  └─────────┘  └─────────┘  └─────────┘  └─────────┘    │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+## Architecture Principles
+
+### 1. SOLID Principles
+- **Single Responsibility**: Each microservice handles one business domain
+- **Open/Closed**: Services extensible via plugins, closed for modification
+- **Liskov Substitution**: Service implementations are interchangeable
+- **Interface Segregation**: Minimal, focused service interfaces
+- **Dependency Inversion**: All external dependencies use abstractions
+
+### 2. Software Engineering Best Practices
+- **DRY** (Don't Repeat Yourself): Shared libraries for common functionality
+- **KISS** (Keep It Simple): Simple service boundaries and clear APIs
+- **YAGNI** (You Aren't Gonna Need It): Build only what's required
+- **Separation of Concerns**: Clear service boundaries
+- **12-Factor App**: Environment-based configuration
+
+### 3. Environment Configuration
+- **Dev/Test/Prod Environments**: Separate configurations
+- **Feature Flags**: Progressive rollout capability
+- **Environment Variables**: All secrets and configs
+- **CI/CD Pipeline**: GitHub Actions for automated deployment
+
+### 4. Multi-Studio Architecture
+- **Studio Hierarchy**: Owners can manage multiple locations
+- **Centralized Billing**: Aggregate billing across studios
+- **Isolated Data**: Tenant isolation at database level
+- **Shared Infrastructure**: Cost-effective resource utilization
 
 ## Core Components
 

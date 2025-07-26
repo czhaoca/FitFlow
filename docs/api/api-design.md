@@ -3,12 +3,62 @@
 ## Overview
 RESTful API design following OpenAPI 3.0 specification with JWT authentication and role-based access control.
 
+## Technology Stack
+
+### Cloud Platform (Choose One)
+- **OCI Free Tier**: Primary choice for cost-effectiveness
+  - Compute: ARM VM (Ubuntu) with Docker
+  - Storage: OCI Object Storage (S3-compatible)
+  - Database: OCI Autonomous Database or PostgreSQL on VM
+  - Load Balancer: OCI Load Balancer
+- **Cloudflare Free Tier**: Alternative option
+  - Workers for edge computing
+  - R2 for object storage (S3-compatible)
+  - D1 for SQL database
+  - Zero Trust for security
+
+### Core Stack
+- **Backend**: Node.js with Express.js/Fastify (microservices)
+- **API Style**: RESTful with potential GraphQL layer
+- **Authentication**: JWT with OAuth2 integration
+- **Database**: PostgreSQL (AWS RDS-compatible APIs)
+- **Storage**: S3-compatible object storage (OCI/R2)
+- **Message Queue**: Redis/Bull or AWS SQS-compatible
+- **API Documentation**: OpenAPI/Swagger
+- **Rate Limiting**: Redis-based with sliding window
+- **Containerization**: Docker with docker-compose
+- **Orchestration**: Docker Swarm or K3s (lightweight Kubernetes)
+
+### Environment Configuration
+- **Config Management**: Environment-based (dev/test/prod)
+- **Feature Flags**: Progressive deployment support
+- **Infrastructure as Code**: Terraform-compatible
+- **CI/CD**: GitHub Actions with environment-specific deployments
+
 ## Base URL Structure
 ```
 Production: https://api.fitflow.ca/v1
 Staging: https://staging-api.fitflow.ca/v1
 Development: http://localhost:3000/v1
 ```
+
+## Microservices Architecture
+
+### Service Decomposition
+1. **Auth Service** - Authentication & authorization
+2. **User Service** - Trainer & client management
+3. **Scheduling Service** - Appointments & calendar
+4. **Session Service** - Session notes & training plans
+5. **Financial Service** - Invoicing & payments
+6. **Studio Service** - Multi-studio management
+7. **Notification Service** - Email, SMS, push notifications
+8. **Analytics Service** - Reporting & business intelligence
+9. **Gateway Service** - API gateway & routing
+
+### Inter-Service Communication
+- **Synchronous**: REST APIs with circuit breakers
+- **Asynchronous**: Message queue (Redis/Bull)
+- **Service Discovery**: Consul or Docker Swarm DNS
 
 ## Authentication
 All API requests require JWT token in Authorization header:
