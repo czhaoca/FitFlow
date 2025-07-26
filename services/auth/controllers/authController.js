@@ -1,4 +1,5 @@
 const clientAuthService = require('../services/clientAuthService');
+const webauthnService = require('../services/webauthnService');
 const { validateRegistration, validateLogin, validatePasswordReset } = require('../utils/validators');
 const logger = require('../utils/logger');
 
@@ -272,6 +273,167 @@ class AuthController {
     } catch (error) {
       logger.error('Profile update error:', error);
       res.status(500).json({ error: 'Failed to update profile' });
+    }
+  }
+
+  /**
+   * WebAuthn - Generate registration options
+   */
+  async generateRegistrationOptions(req, res) {
+    try {
+      const userId = req.user.id;
+      const { email, firstName, lastName } = req.user;
+      const userName = `${firstName} ${lastName}`;
+
+      const options = await webauthnService.generateRegistrationOptions(userId, email, userName);
+      
+      res.json(options);
+    } catch (error) {
+      logger.error('WebAuthn registration options error:', error);
+      res.status(500).json({ error: 'Failed to generate registration options' });
+    }
+  }
+
+  /**
+   * WebAuthn - Verify registration
+   */
+  async verifyRegistration(req, res) {
+    try {
+      const userId = req.user.id;
+      const response = req.body;
+
+      const result = await webauthnService.verifyRegistration(userId, response);
+      
+      if (result.verified) {
+        // Enable WebAuthn for user
+        await clientAuthService.enableWebAuthn(userId);
+        
+        res.json({
+          success: true,
+          message: 'Passkey registered successfully'
+        });
+      } else {
+        res.status(400).json({ error: result.error || 'Registration verification failed' });
+      }
+    } catch (error) {
+      logger.error('WebAuthn registration verification error:', error);
+      res.status(500).json({ error: 'Failed to verify registration' });
+    }
+  }
+
+  /**
+   * WebAuthn - Generate authentication options
+   */
+  async generateAuthenticationOptions(req, res) {
+    try {
+      const { email } = req.body; // Optional, for passwordless login
+      
+      const options = await webauthnService.generateAuthenticationOptions(email || req.user?.id);
+      
+      res.json(options);
+    } catch (error) {
+      logger.error('WebAuthn authentication options error:', error);
+      res.status(500).json({ error: 'Failed to generate authentication options' });
+    }
+  }
+
+  /**
+   * WebAuthn - Verify authentication
+   */
+  async verifyAuthentication(req, res) {
+    try {
+      const response = req.body;
+      const expectedChallenge = req.body.expectedChallenge;
+
+      const result = await webauthnService.verifyAuthentication(response, expectedChallenge);
+      
+      if (result.verified) {
+        // Generate tokens
+        const tokens = await clientAuthService.generateTokensForUser(result.userId);
+        
+        // Set refresh token as httpOnly cookie
+        res.cookie('refreshToken', tokens.refreshToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          maxAge: 7 * 24 * 60 * 60 * 1000
+        });
+
+        res.json({
+          success: true,
+          accessToken: tokens.accessToken,
+          user: tokens.user
+        });
+      } else {
+        res.status(400).json({ error: result.error || 'Authentication verification failed' });
+      }
+    } catch (error) {
+      logger.error('WebAuthn authentication verification error:', error);
+      res.status(500).json({ error: 'Failed to verify authentication' });
+    }
+  }
+
+  /**
+   * List user's passkeys
+   */
+  async listPasskeys(req, res) {
+    try {
+      const userId = req.user.id;
+      
+      const passkeys = await webauthnService.listUserPasskeys(userId);
+      
+      res.json({
+        success: true,
+        passkeys
+      });
+    } catch (error) {
+      logger.error('List passkeys error:', error);
+      res.status(500).json({ error: 'Failed to list passkeys' });
+    }
+  }
+
+  /**
+   * Delete a passkey
+   */
+  async deletePasskey(req, res) {
+    try {
+      const userId = req.user.id;
+      const { passkeyId } = req.params;
+      
+      await webauthnService.deletePasskey(userId, passkeyId);
+      
+      res.json({
+        success: true,
+        message: 'Passkey deleted successfully'
+      });
+    } catch (error) {
+      logger.error('Delete passkey error:', error);
+      res.status(500).json({ error: 'Failed to delete passkey' });
+    }
+  }
+
+  /**
+   * Rename a passkey
+   */
+  async renamePasskey(req, res) {
+    try {
+      const userId = req.user.id;
+      const { passkeyId } = req.params;
+      const { name } = req.body;
+      
+      if (!name || name.trim().length === 0) {
+        return res.status(400).json({ error: 'Name is required' });
+      }
+
+      await webauthnService.renamePasskey(userId, passkeyId, name.trim());
+      
+      res.json({
+        success: true,
+        message: 'Passkey renamed successfully'
+      });
+    } catch (error) {
+      logger.error('Rename passkey error:', error);
+      res.status(500).json({ error: 'Failed to rename passkey' });
     }
   }
 }

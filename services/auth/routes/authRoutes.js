@@ -21,4 +21,13 @@ router.put('/profile', rateLimiter, authController.updateProfile);
 router.post('/2fa/enable', rateLimiter, authController.enableTwoFactor);
 router.post('/2fa/confirm', rateLimiter, authController.confirmTwoFactor);
 
+// WebAuthn/Passkey routes
+router.post('/webauthn/registration/options', authController.generateRegistrationOptions);
+router.post('/webauthn/registration/verify', authController.verifyRegistration);
+router.post('/webauthn/authentication/options', authController.generateAuthenticationOptions);
+router.post('/webauthn/authentication/verify', authController.verifyAuthentication);
+router.get('/webauthn/passkeys', authController.listPasskeys);
+router.delete('/webauthn/passkeys/:passkeyId', authController.deletePasskey);
+router.put('/webauthn/passkeys/:passkeyId', authController.renamePasskey);
+
 module.exports = router;

@@ -22,9 +22,10 @@ CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) UNIQUE NOT NULL,
     email_verified BOOLEAN DEFAULT FALSE,
-    password_hash VARCHAR(255) NOT NULL,
+    password_hash VARCHAR(255),
     mfa_enabled BOOLEAN DEFAULT FALSE,
     mfa_secret VARCHAR(255),
+    webauthn_enabled BOOLEAN DEFAULT FALSE,
     status VARCHAR(50) DEFAULT 'active', -- active, suspended, deleted
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -33,9 +34,42 @@ CREATE TABLE users (
     metadata JSONB DEFAULT '{}'::JSONB
 );
 
--- Trainers table (extends users)
+-- WebAuthn credentials for passkey support
+CREATE TABLE webauthn_credentials (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    credential_id TEXT NOT NULL UNIQUE,
+    public_key TEXT NOT NULL,
+    counter BIGINT DEFAULT 0,
+    aaguid TEXT,
+    transports TEXT[],
+    device_name VARCHAR(255),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    last_used_at TIMESTAMP WITH TIME ZONE,
+    INDEX idx_webauthn_user (user_id)
+);
+
+-- Persons table (polymorphic base for trainers and clients)
+CREATE TABLE persons (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID UNIQUE REFERENCES users(id),
+    person_type VARCHAR(50) NOT NULL, -- trainer, client
+    first_name VARCHAR(100) NOT NULL, -- Encrypted
+    last_name VARCHAR(100) NOT NULL, -- Encrypted
+    email VARCHAR(255) NOT NULL, -- Encrypted
+    phone VARCHAR(50), -- Encrypted
+    date_of_birth DATE, -- Encrypted
+    emergency_contact JSONB, -- Encrypted
+    profile_photo_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    INDEX idx_person_type (person_type),
+    INDEX idx_person_user (user_id)
+);
+
+-- Trainers table (extends persons)
 CREATE TABLE trainers (
-    id UUID PRIMARY KEY REFERENCES users(id),
+    id UUID PRIMARY KEY REFERENCES persons(id),
     parent_trainer_id UUID REFERENCES trainers(id), -- For hierarchy
     business_name VARCHAR(255),
     license_number VARCHAR(100),
@@ -45,6 +79,7 @@ CREATE TABLE trainers (
     commission_rate DECIMAL(5, 2), -- For trainer admins
     bank_account_info JSONB, -- Encrypted
     tax_info JSONB, -- Encrypted, includes GST number
+    can_view_shared_notes BOOLEAN DEFAULT TRUE,
     settings JSONB DEFAULT '{}'::JSONB
 );
 
@@ -73,7 +108,7 @@ CREATE TABLE trainer_studios (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     trainer_id UUID NOT NULL REFERENCES trainers(id),
     studio_id UUID NOT NULL REFERENCES studios(id),
-    role VARCHAR(50) DEFAULT 'contractor', -- contractor, employee
+    role VARCHAR(50) DEFAULT 'contractor', -- contractor, employee, manager, owner
     commission_rate DECIMAL(5, 2),
     class_rates JSONB, -- {group: 50, individual: 100, trial: 25}
     start_date DATE NOT NULL,
@@ -82,31 +117,51 @@ CREATE TABLE trainer_studios (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(trainer_id, studio_id)
 );
+
+-- Manager delegations
+CREATE TABLE manager_delegations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    studio_id UUID NOT NULL REFERENCES studios(id),
+    delegator_id UUID NOT NULL REFERENCES trainers(id), -- Must be manager/owner
+    delegate_id UUID NOT NULL REFERENCES trainers(id),
+    delegation_type VARCHAR(50) NOT NULL, -- full, limited
+    permissions JSONB, -- Specific permissions if limited
+    start_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    can_further_delegate BOOLEAN DEFAULT FALSE, -- Always false
+    reason TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_by UUID NOT NULL REFERENCES trainers(id),
+    revoked_at TIMESTAMP WITH TIME ZONE,
+    revoked_by UUID REFERENCES trainers(id),
+    UNIQUE(studio_id, delegate_id, start_date),
+    CHECK (end_date > start_date),
+    CHECK (can_further_delegate = FALSE) -- Enforce no further delegation
+);
 ```
 
 ### Client Management Schema
 ```sql
--- Clients table (HIPAA compliant, with login capability)
+-- Clients table (extends persons, HIPAA compliant)
 CREATE TABLE clients (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id), -- Link to users table for login
-    first_name VARCHAR(100) NOT NULL, -- Encrypted
-    last_name VARCHAR(100) NOT NULL, -- Encrypted
-    email VARCHAR(255) UNIQUE, -- Encrypted, unique for login
-    phone VARCHAR(50), -- Encrypted
-    date_of_birth DATE, -- Encrypted
-    emergency_contact JSONB, -- Encrypted
+    id UUID PRIMARY KEY REFERENCES persons(id),
     medical_info JSONB, -- Encrypted, {conditions, medications, allergies}
     goals TEXT, -- Encrypted
     preferences JSONB,
     source VARCHAR(100), -- referral, walk-in, online
     stripe_customer_id VARCHAR(255), -- Stripe customer ID
     default_payment_method_id VARCHAR(255), -- Stripe payment method
+    
+    -- Privacy settings
+    allow_session_sharing BOOLEAN DEFAULT TRUE, -- Master control for session sharing
+    allow_trainer_notes_sharing BOOLEAN DEFAULT TRUE,
+    allow_progress_sharing BOOLEAN DEFAULT TRUE,
+    
     status VARCHAR(50) DEFAULT 'active',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    deleted_at TIMESTAMP WITH TIME ZONE,
-    INDEX idx_client_email (email)
+    deleted_at TIMESTAMP WITH TIME ZONE
 );
 
 -- Client-Trainer relationships (clients can work with multiple trainers)
@@ -235,7 +290,13 @@ CREATE TABLE session_notes (
     exercises JSONB, -- Encrypted - {name, sets, reps, weight, notes}
     measurements JSONB, -- Encrypted - {weight, body_fat, measurements}
     private_notes TEXT, -- Encrypted - Not shared with client
+    trainer_internal_notes TEXT, -- Encrypted - Shared among trainers if allowed
     ai_summary TEXT, -- Encrypted - AI-generated summary
+    
+    -- Sharing controls
+    is_shareable_with_trainers BOOLEAN DEFAULT TRUE, -- Can other trainers see this
+    shared_by_trainer BOOLEAN DEFAULT FALSE, -- Trainer marked this as shareable
+    
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     INDEX idx_client_notes (client_id, session_date DESC)
@@ -413,6 +474,54 @@ CREATE TABLE tax_remittances (
 );
 ```
 
+### Notification Schema
+```sql
+-- Notification preferences
+CREATE TABLE notification_preferences (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    notification_type VARCHAR(100) NOT NULL, -- daily_reminder, session_summary, payment_receipt, etc
+    channel VARCHAR(50) NOT NULL, -- email, sms, push
+    enabled BOOLEAN DEFAULT TRUE,
+    schedule JSONB, -- {time: "08:00", timezone: "America/Toronto"}
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_id, notification_type, channel)
+);
+
+-- Notification queue
+CREATE TABLE notification_queue (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    notification_type VARCHAR(100) NOT NULL,
+    channel VARCHAR(50) NOT NULL,
+    recipient VARCHAR(255) NOT NULL, -- email or phone
+    subject VARCHAR(255),
+    content TEXT NOT NULL,
+    metadata JSONB, -- Additional data for the notification
+    scheduled_for TIMESTAMP WITH TIME ZONE NOT NULL,
+    status VARCHAR(50) DEFAULT 'pending', -- pending, sending, sent, failed
+    attempts INTEGER DEFAULT 0,
+    sent_at TIMESTAMP WITH TIME ZONE,
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    INDEX idx_notification_queue_status (status, scheduled_for)
+);
+
+-- Daily summaries for trainers
+CREATE TABLE trainer_daily_summaries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trainer_id UUID NOT NULL REFERENCES trainers(id),
+    summary_date DATE NOT NULL,
+    appointments JSONB NOT NULL, -- Array of appointment details
+    client_notes JSONB, -- Summary of important client notes
+    ai_insights TEXT, -- AI-generated insights
+    sent_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(trainer_id, summary_date)
+);
+```
+
 ### Audit and Security Schema
 ```sql
 -- Audit log for all data changes
@@ -504,6 +613,54 @@ CREATE POLICY client_appointment_access ON appointments
             JOIN clients c ON ap.client_id = c.id
             WHERE ap.appointment_id = appointments.id
             AND c.user_id = current_user_id()
+        )
+    );
+
+-- RLS policy for session notes with privacy controls
+CREATE POLICY session_notes_access ON session_notes
+    FOR SELECT
+    USING (
+        -- Trainer who created the note
+        trainer_id = current_user_id()
+        -- Client can see their own notes (except private/internal)
+        OR (client_id IN (SELECT id FROM clients WHERE user_id = current_user_id()))
+        -- Other trainers can see if client allows AND trainer marked as shareable
+        OR (
+            EXISTS (
+                SELECT 1 FROM clients c
+                WHERE c.id = session_notes.client_id
+                AND c.allow_session_sharing = TRUE
+                AND c.allow_trainer_notes_sharing = TRUE
+            )
+            AND session_notes.shared_by_trainer = TRUE
+            AND session_notes.is_shareable_with_trainers = TRUE
+            AND EXISTS (
+                SELECT 1 FROM client_trainers ct
+                WHERE ct.client_id = session_notes.client_id
+                AND ct.trainer_id = current_user_id()
+            )
+        )
+        -- Studio managers/owners can see all
+        OR EXISTS (
+            SELECT 1 FROM trainer_studios ts
+            WHERE ts.trainer_id = current_user_id()
+            AND ts.role IN ('manager', 'owner')
+            AND ts.studio_id IN (
+                SELECT studio_id FROM appointments a
+                WHERE a.id = session_notes.appointment_id
+            )
+        )
+        -- Delegated managers
+        OR EXISTS (
+            SELECT 1 FROM manager_delegations md
+            WHERE md.delegate_id = current_user_id()
+            AND md.is_active = TRUE
+            AND md.start_date <= NOW()
+            AND md.end_date >= NOW()
+            AND md.studio_id IN (
+                SELECT studio_id FROM appointments a
+                WHERE a.id = session_notes.appointment_id
+            )
         )
     );
 ```

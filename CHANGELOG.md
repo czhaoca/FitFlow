@@ -114,3 +114,73 @@ services/
 - Designed to support complex multi-studio, multi-trainer relationships
 - Implemented separate notes systems for trainers (private) and clients (visible)
 - Created comprehensive authentication system with modern security features
+
+## [2025-07-26] - Enhanced Security and Privacy Features
+
+### Added
+- **Polymorphic Person Entity**
+  - Created persons table as base entity for trainers and clients
+  - Enables code reuse and consistent data structure
+  - Supports future extension for other user types
+
+- **WebAuthn/Passkey Support**
+  - Complete passkey authentication implementation
+  - Support for platform authenticators (Face ID, Touch ID, Windows Hello)
+  - Multiple passkey management per user
+  - Passwordless login capability
+  - Device management and naming
+
+- **Notification Service**
+  - Email and SMS notification support
+  - Daily summary emails for trainers with next day's schedule
+  - AI-powered summaries using OpenAI integration
+  - Appointment reminders with customizable timing
+  - Client progress insights and recommendations
+  - Notification preferences and scheduling
+  - Queue-based processing with Bull and Redis
+
+- **Privacy Controls & Session Sharing**
+  - Master privacy toggle for clients to control data sharing
+  - Granular controls for session notes, trainer notes, and progress sharing
+  - Trainer can mark sessions as shareable
+  - Client consent required for cross-trainer visibility
+  - Separate trainer internal notes from client-visible notes
+  - Full session history access for studio managers/owners only
+
+- **Manager Delegation System**
+  - Temporary delegation of manager powers
+  - No further delegation allowed (prevents delegation chains)
+  - Time-bound delegations with automatic expiry
+  - Full or limited permission delegation
+  - Audit trail for all delegations
+  - Automatic notifications for delegation changes
+
+### Changed
+- Updated database schema with new tables:
+  - webauthn_credentials for passkey storage
+  - persons table for polymorphic user base
+  - notification_preferences and notification_queue
+  - manager_delegations for delegation tracking
+  - trainer_daily_summaries for AI summaries
+- Enhanced session_notes table with sharing controls
+- Added privacy settings to clients table
+- Updated trainer_studios roles to include manager role
+
+### Technical Implementation
+- **WebAuthn**: SimpleWebAuthn library for FIDO2 compliance
+- **Notifications**: Nodemailer (email), Twilio (SMS), Bull (queuing)
+- **AI Summaries**: OpenAI GPT-3.5 for intelligent insights
+- **Privacy**: Row-level security policies with complex access rules
+- **Cron Jobs**: Automated scheduling for daily summaries and reminders
+
+### Security Enhancements
+- Passkey support reduces password-related vulnerabilities
+- Client-controlled privacy settings ensure data protection
+- Delegation system prevents unauthorized access escalation
+- Comprehensive audit logging for all privacy-related actions
+
+### Conversation Context
+- Enhanced security with passkey/MFA for both trainers and clients
+- Implemented client privacy controls respecting user consent
+- Created notification system with AI-powered trainer summaries
+- Added manager delegation with strict no-further-delegation policy

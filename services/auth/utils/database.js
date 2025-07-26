@@ -1,5 +1,6 @@
 const { Pool } = require('pg');
 const logger = require('./logger');
+const redisClient = require('./redis');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -80,6 +81,11 @@ class Database {
   async enableUserTwoFactor(userId, secret) {
     const query = 'UPDATE users SET mfa_enabled = true, mfa_secret = $1 WHERE id = $2';
     await this.query(query, [secret, userId]);
+  }
+
+  async enableWebAuthn(userId) {
+    const query = 'UPDATE users SET webauthn_enabled = true WHERE id = $1';
+    await this.query(query, [userId]);
   }
 
   // Client operations
@@ -175,6 +181,104 @@ class Database {
     `;
     
     const result = await this.query(query, [clientId, trainerId, studioId]);
+    return result.rows[0];
+  }
+
+  // WebAuthn operations
+  async getUserWebAuthnCredentials(userId) {
+    const query = 'SELECT * FROM webauthn_credentials WHERE user_id = $1 ORDER BY created_at DESC';
+    const result = await this.query(query, [userId]);
+    return result.rows;
+  }
+
+  async getWebAuthnCredential(credentialId) {
+    const query = 'SELECT * FROM webauthn_credentials WHERE credential_id = $1';
+    const result = await this.query(query, [credentialId]);
+    return result.rows[0];
+  }
+
+  async saveWebAuthnCredential(data) {
+    const query = `
+      INSERT INTO webauthn_credentials (
+        user_id, credential_id, public_key, counter,
+        aaguid, transports, device_name, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+      RETURNING id
+    `;
+    
+    const values = [
+      data.userId,
+      data.credentialId,
+      data.publicKey,
+      data.counter,
+      data.aaguid,
+      data.transports,
+      data.deviceName
+    ];
+    
+    const result = await this.query(query, values);
+    return result.rows[0].id;
+  }
+
+  async updateWebAuthnCredential(credentialId, updates, userId = null) {
+    const updateFields = [];
+    const values = [];
+    let paramCount = 1;
+
+    if (updates.counter !== undefined) {
+      updateFields.push(`counter = $${paramCount}`);
+      values.push(updates.counter);
+      paramCount++;
+    }
+
+    if (updates.lastUsedAt !== undefined) {
+      updateFields.push(`last_used_at = $${paramCount}`);
+      values.push(updates.lastUsedAt);
+      paramCount++;
+    }
+
+    if (updates.deviceName !== undefined) {
+      updateFields.push(`device_name = $${paramCount}`);
+      values.push(updates.deviceName);
+      paramCount++;
+    }
+
+    values.push(credentialId);
+    let query = `UPDATE webauthn_credentials SET ${updateFields.join(', ')} WHERE credential_id = $${paramCount}`;
+    
+    if (userId) {
+      paramCount++;
+      values.push(userId);
+      query += ` AND user_id = $${paramCount}`;
+    }
+
+    await this.query(query, values);
+  }
+
+  async deleteWebAuthnCredential(userId, credentialId) {
+    const query = 'DELETE FROM webauthn_credentials WHERE user_id = $1 AND id = $2';
+    await this.query(query, [userId, credentialId]);
+  }
+
+  async storeWebAuthnChallenge(key, challenge, type) {
+    const redisKey = `webauthn:${type}:${key}`;
+    await redisClient.setex(redisKey, 300, challenge); // 5 minutes expiry
+  }
+
+  async getWebAuthnChallenge(key, type) {
+    const redisKey = `webauthn:${type}:${key}`;
+    return await redisClient.get(redisKey);
+  }
+
+  async clearWebAuthnChallenge(key, type) {
+    const redisKey = `webauthn:${type}:${key}`;
+    await redisClient.del(redisKey);
+  }
+
+  // Person operations
+  async getPersonByUserId(userId) {
+    const query = 'SELECT * FROM persons WHERE user_id = $1';
+    const result = await this.query(query, [userId]);
     return result.rows[0];
   }
 }
