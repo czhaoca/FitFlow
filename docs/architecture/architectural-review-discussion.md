@@ -17,7 +17,9 @@ This document presents a comprehensive architectural review of the FitFlow platf
 
 ## Critical Issues
 
-### 1. Database Multi-Tenancy Strategy
+### 1. Database Multi-Tenancy Strategy ✅ **RESOLVED**
+
+> **Decision**: Shared Tables with Tenant ID approach selected. See [ADR-001](/docs/architecture/decisions/ADR-001-multitenancy-strategy.md) for detailed rationale.
 
 **Current State:**
 - Shared database with Row-Level Security (RLS)
@@ -64,12 +66,26 @@ CREATE INDEX idx_appointments_tenant ON appointments(tenant_id, start_time);
 
 **Discussion Points:**
 1. What is the expected studio size distribution? (small/medium/large)
+   - **Answer**: Studios won't grow to 1000s of active clients. Expected distribution is mostly small to medium studios with limited growth potential.
 2. Are there regulatory requirements for specific studios?
+   - **Answer**: Standard HIPAA and PIPEDA compliance required for all studios handling health information.
 3. What is the acceptable complexity for operations team?
+   - **Answer**: Prefer simpler implementation that's easier to maintain and operate.
+
+**DECISION**: Option B (Shared Tables with Tenant ID) selected.
+
+**Decision Rationale**:
+- **Trainer Flexibility**: Trainers may work at multiple studios on the same day (e.g., Studio A in morning, Studio B in afternoon), which would be overly complicated with schema separation
+- **Simpler Implementation**: Easier to implement and maintain than schema-based approach
+- **Sufficient for Scale**: Since studios won't grow to 1000s of clients, the shared table approach with proper indexing will perform adequately
+- **Better Resource Utilization**: More efficient use of database resources for smaller studios
+- **Easier Cross-Studio Queries**: Simplifies reporting and analytics across multiple studios for franchise owners
 
 ---
 
-### 2. Oracle vs PostgreSQL Mismatch
+### 2. Oracle vs PostgreSQL Mismatch ✅ **RESOLVED**
+
+> **Decision**: MySQL HeatWave selected for cloud portability. See [ADR-002](/docs/architecture/decisions/ADR-002-database-platform.md) for detailed rationale.
 
 **Current State:**
 - Code written for PostgreSQL
@@ -121,12 +137,26 @@ sudo apt install postgresql-14
 
 **Discussion Points:**
 1. Is there a specific reason for choosing Oracle ATP?
+   - **Answer**: No specific reason; looking for portability and future migration flexibility.
 2. What is the team's Oracle expertise level?
+   - **Answer**: Limited Oracle expertise; prefer standard SQL that works across cloud providers.
 3. Are there future Oracle-specific features planned?
+   - **Answer**: No Oracle-specific features planned; want to remain cloud-agnostic.
+
+**DECISION**: Option C (MySQL HeatWave) confirmed.
+
+**Decision Rationale**:
+- **Cloud Portability**: MySQL syntax is portable across AWS RDS MySQL, Azure Database for MySQL, and Google Cloud SQL
+- **No Vendor Lock-in**: Avoids Oracle-specific features and syntax
+- **Easier Migration**: Standard MySQL allows seamless migration between cloud providers
+- **Team Familiarity**: MySQL is widely known and supported
+- **Free Tier Available**: 50GB storage in OCI MySQL HeatWave free tier
 
 ---
 
-### 3. Security Vulnerabilities
+### 3. Security Vulnerabilities ✅ **RESOLVED**
+
+> **Decision**: Field-Level Encryption approach selected. See [ADR-003](/docs/architecture/decisions/ADR-003-encryption-strategy.md) for detailed rationale.
 
 **Current State:**
 - Sensitive data in JSONB columns (bank info, medical records)
@@ -188,14 +218,28 @@ dbRecord.medical_info_ref = vaultKey;
 
 **Discussion Points:**
 1. What is the acceptable performance impact of encryption?
+   - **Answer**: Minimal performance impact acceptable for security benefits.
 2. Do we need to support searching encrypted fields?
+   - **Answer**: No need to search within encrypted medical/financial data.
 3. What is the key rotation policy requirement?
+   - **Answer**: Monthly rotation for data encryption keys, annual for master keys.
+
+**DECISION**: Option A (Field-Level Encryption) selected.
+
+**Decision Rationale**:
+- **No Additional Vendors**: Avoids introducing HashiCorp Vault dependency
+- **OCI Free Tier Limitation**: OCI Vault not available in free tier
+- **Simpler Implementation**: Application-level encryption is straightforward
+- **Sufficient Security**: Meets HIPAA requirements with proper key management
+- **Performance Acceptable**: Field-level encryption has minimal impact
 
 ---
 
 ## High Priority Concerns
 
-### 4. Microservices Communication
+### 4. Microservices Communication ✅ **RESOLVED**
+
+> **Decision**: Custom API Gateway with direct HTTP calls. See [ADR-004](/docs/architecture/decisions/ADR-004-api-gateway-strategy.md) for detailed rationale.
 
 **Current State:**
 - Direct HTTP calls between services
@@ -267,12 +311,26 @@ eventBus.subscribe('user.created', handleUserCreated);
 
 **Discussion Points:**
 1. What is the expected request volume between services?
+   - **Answer**: Low initially, max 100-200 requests/second in first year.
 2. Is eventual consistency acceptable for all operations?
+   - **Answer**: NO - appointments and payments require strong consistency.
 3. What is the team's experience with service mesh technologies?
+   - **Answer**: Limited experience; prefer simpler, human-readable solutions.
+
+**DECISION**: Develop custom API Gateway for better control and readability.
+
+**Decision Rationale**:
+- **Human Readable**: Custom gateway code is easier to understand and debug
+- **Scalability**: Can start simple and evolve with needs
+- **No Service Mesh Complexity**: Avoid unnecessary complexity for low volume
+- **Strong Consistency**: Direct HTTP calls maintain consistency for critical operations
+- **Future Ready**: Can add message queue stubs for future async needs
 
 ---
 
-### 5. Scalability Bottlenecks
+### 5. Scalability Bottlenecks ✅ **RESOLVED**
+
+> **Decision**: Smart caching strategy with data-specific TTLs. See [ADR-005](/docs/architecture/decisions/ADR-005-caching-strategy.md) for detailed rationale.
 
 **Current State:**
 - Single Redis instance
@@ -343,12 +401,26 @@ sentinel failover-timeout mymaster 10000
 
 **Discussion Points:**
 1. What is the acceptable cache staleness for different data types?
+   - **Answer**: Appointments need real-time accuracy; historical data can have higher latency.
 2. Should we implement Redis Cluster or Sentinel?
+   - **Answer**: Neither needed initially due to low volume; single Redis sufficient.
 3. What CDN provider aligns with OCI (Cloudflare, Fastly)?
+   - **Answer**: Cloudflare when needed, but not required initially due to small user base.
+
+**DECISION**: Implement smart caching with different TTLs per data type.
+
+**Decision Rationale**:
+- **Real-time Critical Data**: Appointments and availability bypass cache or use very short TTL (10s)
+- **Historical Data**: Can use longer TTL (5-30 minutes) for reports and analytics
+- **Defer CDN**: No CDN needed initially; add Cloudflare later if required
+- **Simple Redis Setup**: Single instance sufficient for expected volume
+- **Cost Effective**: Minimal infrastructure for early stages
 
 ---
 
-### 6. Payment Processing Architecture
+### 6. Payment Processing Architecture ✅ **RESOLVED**
+
+> **Decision**: Payment abstraction with Stripe + Interac for Canadian market. See [ADR-006](/docs/architecture/decisions/ADR-006-payment-architecture.md) for detailed rationale.
 
 **Current State:**
 - Direct Stripe integration
@@ -412,14 +484,28 @@ class PaymentService {
 
 **Discussion Points:**
 1. What payment methods are required? (credit, debit, ACH, e-transfer)
+   - **Answer**: Credit, debit, and Interac e-Transfer required.
 2. Is multi-currency support needed?
+   - **Answer**: CAD and USD only.
 3. What is the expected transaction volume?
+   - **Answer**: Max 100 transactions per week initially, possibly much less.
+
+**DECISION**: Implement payment abstraction layer with Stripe + Interac integration.
+
+**Decision Rationale**:
+- **Low Volume**: 100 transactions/week doesn't require complex infrastructure
+- **Canadian Focus**: Interac e-Transfer is essential for Canadian market
+- **Dual Currency**: Simple CAD/USD support sufficient
+- **Abstraction Layer**: Allows future payment provider additions
+- **Synchronous Processing**: Low volume allows synchronous payment processing
 
 ---
 
 ## Architecture Improvements
 
-### 7. Event-Driven Architecture
+### 7. Event-Driven Architecture ✅ **RESOLVED**
+
+> **Decision**: Defer implementation; use synchronous with future-ready stubs. See [ADR-007](/docs/architecture/decisions/ADR-007-event-architecture.md) for detailed rationale.
 
 **Current State:**
 - Synchronous communication
@@ -492,8 +578,20 @@ class AppointmentProjection {
 
 **Discussion Points:**
 1. Is eventual consistency acceptable for all features?
+   - **Answer**: NO - appointments and payments require strong consistency.
 2. What is the event retention policy?
+   - **Answer**: 90 days for operational events, 7 years for payment events.
 3. Should we use Kafka, RabbitMQ, or AWS EventBridge?
+   - **Answer**: None initially; implement stubs for future message queue integration.
+
+**DECISION**: Defer event-driven architecture; implement with stubs for future.
+
+**Decision Rationale**:
+- **Strong Consistency Required**: Appointments and payments need immediate consistency
+- **Low Volume**: Current volume doesn't justify event-driven complexity
+- **Future Ready**: Implement interface stubs for seamless future integration
+- **Synchronous First**: Direct database writes ensure data consistency
+- **Gradual Migration**: Can introduce events for non-critical features later
 
 ---
 
@@ -1198,12 +1296,15 @@ Service Distribution:
 
 | Decision | Options | Recommendation | Rationale |
 |----------|---------|----------------|-----------|
-| Database Platform | PostgreSQL vs Oracle | PostgreSQL on VM | Better compatibility, lower complexity |
-| Multi-tenancy | Shared vs Schema vs Database | Schema-based | Balance of isolation and efficiency |
-| API Gateway | Kong vs Istio vs Custom | Kong | Mature, easy to implement |
-| Event Bus | Kafka vs RabbitMQ vs Redis | Redis Streams | Already using Redis, simpler |
-| Monitoring | Self-hosted vs Managed | Self-hosted initially | Cost-effective for current scale |
-| CDN | Cloudflare vs OCI | Cloudflare | Better features and pricing |
+| Database Platform | PostgreSQL vs Oracle vs MySQL | MySQL HeatWave ✅ | Cloud portability, no vendor lock-in |
+| Multi-tenancy | Shared vs Schema vs Database | Shared Tables with Tenant ID ✅ | Trainer flexibility, simpler implementation, sufficient for scale |
+| Encryption | Field-level vs Vault vs TDE+App | Field-Level Encryption ✅ | No additional vendors, OCI free tier compatible |
+| API Gateway | Kong vs Istio vs Custom | Custom API Gateway ✅ | Human readable, scalable, simple |
+| Caching Strategy | Aggressive vs Smart vs None | Smart Caching (TTL per type) ✅ | Real-time for appointments, cached for historical |
+| Payment Architecture | Direct vs Abstraction | Abstraction Layer ✅ | Stripe + Interac, CAD/USD only |
+| Event Architecture | Full CQRS vs Hybrid vs Defer | Defer with Stubs ✅ | Strong consistency required, low volume |
+| CDN | Cloudflare vs OCI vs None | None (defer Cloudflare) ✅ | Not needed initially for small user base |
+| Monitoring | Self-hosted vs Managed | Self-hosted initially ✅ | Cost-effective for current scale |
 
 ### Risk Assessment
 

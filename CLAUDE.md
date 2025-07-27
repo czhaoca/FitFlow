@@ -12,11 +12,13 @@ This document contains critical development guidelines and best practices for Fi
   - 50 GB Boot Volume
   - Ubuntu 22.04 LTS
   - CloudPanel for server management
-- **Database**: OCI Autonomous Database (Always Free)
-  - 20 GB storage for transactional workloads
-  - Auto-scaling OCPU
-  - Built-in backups and high availability
-  - Oracle APEX included (for admin interfaces)
+- **Database**: MySQL HeatWave (Always Free)
+  - 50 GB storage
+  - 1 OCPU
+  - Automated backups
+  - High availability
+  - HeatWave analytics for real-time insights
+  - Cloud-portable (compatible with AWS RDS MySQL, Azure Database for MySQL, Google Cloud SQL)
 - **Object Storage**: OCI Object Storage
   - 20 GB Always Free storage
   - S3-compatible APIs
@@ -41,9 +43,10 @@ This document contains critical development guidelines and best practices for Fi
 ### Core Technologies
 - **Backend**: Node.js 20 LTS with Express.js
 - **Frontend**: React 18 with Next.js 14 (PWA)
-- **Database**: OCI Autonomous Database (Oracle 19c compatible)
-  - Uses Oracle REST Data Services (ORDS)
-  - Compatible with node-oracledb driver
+- **Database**: MySQL HeatWave 8.0
+  - Standard MySQL protocol
+  - Compatible with mysql2 Node.js driver
+  - Cloud-portable SQL syntax
 - **Storage**: OCI Object Storage (S3-compatible)
   - AWS SDK compatible
   - Pre-authenticated requests for secure uploads
@@ -62,6 +65,54 @@ The application is built using microservices to ensure:
 - **Multi-Studio Support**: Owner can manage multiple studio locations
 - **Maintainability**: Clear service boundaries
 - **Resilience**: Service isolation prevents cascading failures
+
+### Multi-Tenancy Strategy (DECIDED)
+**Decision**: Shared Tables with Tenant ID approach
+
+**Implementation**:
+- All tables include a `tenant_id` (UUID) column representing the studio
+- Trainers can be associated with multiple studios via a junction table
+- Row-Level Security (RLS) policies enforce data isolation
+- Composite indexes on (tenant_id, primary_key) for performance
+
+**Key Considerations**:
+- Trainers may work at multiple studios on the same day
+- Studios are small to medium sized (not 1000s of clients)
+- Simplicity and maintainability are priorities
+- Cross-studio reporting needed for franchise owners
+
+**Example Schema**:
+```sql
+-- Studios table
+CREATE TABLE studios (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(255) NOT NULL,
+  owner_id UUID NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Trainers can work at multiple studios
+CREATE TABLE trainer_studios (
+  trainer_id UUID NOT NULL,
+  studio_id UUID NOT NULL,
+  role VARCHAR(50) DEFAULT 'trainer',
+  PRIMARY KEY (trainer_id, studio_id)
+);
+
+-- All other tables include tenant_id
+CREATE TABLE appointments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL, -- Studio ID
+  trainer_id UUID NOT NULL,
+  client_id UUID NOT NULL,
+  start_time TIMESTAMP NOT NULL,
+  -- ... other fields
+  FOREIGN KEY (tenant_id) REFERENCES studios(id)
+);
+
+-- Composite indexes for performance
+CREATE INDEX idx_appointments_tenant ON appointments(tenant_id, start_time);
+```
 
 ### SOLID Principles
 1. **Single Responsibility**: Each service/module has one reason to change
@@ -85,8 +136,11 @@ The application is built using microservices to ensure:
 # Development (OCI Test Environment)
 NODE_ENV=development
 API_URL=https://test.fitflow.example.com
-DB_CONNECTION_STRING=tcps://adb.ca-toronto-1.oraclecloud.com:1522/xyz123_fitflowdev_high.adb.oraclecloud.com
-ORDS_BASE_URL=https://xyz123-fitflowdev.adb.ca-toronto-1.oraclecloudapps.com/ords
+DB_HOST=mysql-xxxxxx.mysql.database.oraclecloud.com
+DB_PORT=3306
+DB_USER=fitflow_dev
+DB_PASSWORD=secure_password
+DB_NAME=fitflow_dev
 OCI_STORAGE_NAMESPACE=namespace123
 OCI_STORAGE_BUCKET_NAME=fitflow-dev
 OCI_STORAGE_REGION=ca-toronto-1
@@ -94,8 +148,11 @@ OCI_STORAGE_REGION=ca-toronto-1
 # Production
 NODE_ENV=production
 API_URL=https://api.fitflow.ca
-DB_CONNECTION_STRING=tcps://adb.ca-toronto-1.oraclecloud.com:1522/xyz123_fitflowprod_high.adb.oraclecloud.com
-ORDS_BASE_URL=https://xyz123-fitflowprod.adb.ca-toronto-1.oraclecloudapps.com/ords
+DB_HOST=mysql-xxxxxx.mysql.database.oraclecloud.com
+DB_PORT=3306
+DB_USER=fitflow_prod
+DB_PASSWORD=secure_password
+DB_NAME=fitflow_prod
 OCI_STORAGE_NAMESPACE=namespace123
 OCI_STORAGE_BUCKET_NAME=fitflow-prod
 OCI_STORAGE_REGION=ca-toronto-1
@@ -342,38 +399,54 @@ const r2 = new AWS.S3({
 });
 ```
 
-### OCI Autonomous Database Connection
+### MySQL HeatWave Connection
 ```javascript
-// Use node-oracledb for OCI Autonomous Database
-const oracledb = require('oracledb');
-
-// Enable thick mode for full compatibility
-oracledb.initOracleClient({ libDir: '/opt/oracle/instantclient' });
+// Use mysql2 for MySQL HeatWave
+const mysql = require('mysql2/promise');
 
 // Connection configuration
 const dbConfig = {
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT || 3306,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  connectionString: process.env.DB_CONNECTION_STRING,
-  poolMin: 10,
-  poolMax: 40,
-  poolIncrement: 5,
-  poolTimeout: 60
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 40,
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
+  ssl: {
+    // MySQL HeatWave requires SSL
+    rejectUnauthorized: true
+  }
 };
 
 // Create connection pool
+let pool;
 async function initializeDatabase() {
   try {
-    await oracledb.createPool(dbConfig);
-    console.log('Database pool created');
+    pool = await mysql.createPool(dbConfig);
+    console.log('MySQL connection pool created');
   } catch (err) {
     console.error('Error creating pool:', err);
   }
 }
 
-// For PostgreSQL compatibility layer
-// Use ORDS (Oracle REST Data Services) for REST APIs
-const ordsBaseUrl = process.env.ORDS_BASE_URL;
+// Query with automatic tenant filtering
+async function query(sql, params, tenantId) {
+  const connection = await pool.getConnection();
+  try {
+    // Set session variable for tenant context
+    if (tenantId) {
+      await connection.execute('SET @tenant_id = ?', [tenantId]);
+    }
+    const [results] = await connection.execute(sql, params);
+    return results;
+  } finally {
+    connection.release();
+  }
+}
 ```
 
 ## Security Best Practices
@@ -391,12 +464,113 @@ const ordsBaseUrl = process.env.ORDS_BASE_URL;
 - SQL injection prevention
 - XSS protection
 
+### Multi-Tenant Security
+- **Tenant Isolation**: All queries must include tenant_id filter
+- **JWT Claims**: Include allowed studio IDs in JWT tokens
+- **Middleware Enforcement**: Automatic tenant_id injection in queries
+- **Cross-Tenant Validation**: Verify trainer has access to requested studio
+- **Audit Trail**: Log all cross-studio access attempts
+
+```javascript
+// Example middleware for tenant isolation
+const tenantIsolation = (req, res, next) => {
+  const userStudios = req.user.studios; // From JWT
+  const requestedStudio = req.params.studioId || req.body.studioId;
+  
+  if (!userStudios.includes(requestedStudio)) {
+    return res.status(403).json({ error: 'Access denied to this studio' });
+  }
+  
+  req.tenantId = requestedStudio;
+  next();
+};
+```
+
 ### HIPAA Compliance
 - Encrypt all PHI at rest and in transit
 - Audit all data access
 - Implement access controls
 - Regular security audits
 - Data retention policies
+
+### Field-Level Encryption (DECIDED)
+**Decision**: Application-level field encryption for sensitive data
+
+**Implementation**:
+```javascript
+const crypto = require('crypto');
+
+class FieldEncryption {
+  constructor() {
+    this.algorithm = 'aes-256-gcm';
+    this.keyDerivationIterations = 100000;
+  }
+
+  // Derive key from master key and salt
+  deriveKey(masterKey, salt) {
+    return crypto.pbkdf2Sync(masterKey, salt, this.keyDerivationIterations, 32, 'sha256');
+  }
+
+  // Encrypt sensitive field
+  encryptField(data, fieldName) {
+    const salt = crypto.randomBytes(16);
+    const key = this.deriveKey(process.env.MASTER_KEY, salt);
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv(this.algorithm, key, iv);
+    
+    let encrypted = cipher.update(JSON.stringify(data), 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    
+    const authTag = cipher.getAuthTag();
+    
+    return {
+      ciphertext: encrypted,
+      salt: salt.toString('hex'),
+      iv: iv.toString('hex'),
+      authTag: authTag.toString('hex'),
+      algorithm: this.algorithm,
+      fieldName: fieldName
+    };
+  }
+  
+  // Decrypt sensitive field
+  decryptField(encryptedData) {
+    const salt = Buffer.from(encryptedData.salt, 'hex');
+    const key = this.deriveKey(process.env.MASTER_KEY, salt);
+    const iv = Buffer.from(encryptedData.iv, 'hex');
+    const authTag = Buffer.from(encryptedData.authTag, 'hex');
+    
+    const decipher = crypto.createDecipheriv(this.algorithm, key, iv);
+    decipher.setAuthTag(authTag);
+    
+    let decrypted = decipher.update(encryptedData.ciphertext, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    
+    return JSON.parse(decrypted);
+  }
+}
+
+// Usage example
+const encryption = new FieldEncryption();
+
+// Encrypt medical info before storage
+const encryptedMedical = encryption.encryptField(
+  medicalInfo, 
+  'medical_info'
+);
+
+// Store encrypted data in database
+await db.query(
+  'UPDATE clients SET medical_info = ? WHERE id = ?',
+  [JSON.stringify(encryptedMedical), clientId]
+);
+```
+
+**Key Management**:
+- Master key stored in environment variable (use OCI Secrets in production)
+- Data encryption keys derived per field with unique salt
+- Monthly key rotation for data keys
+- Annual rotation for master key
 
 ## Monitoring & Logging
 
@@ -494,6 +668,270 @@ npm run dev        # Start development server
 npm run build      # Build for production
 npm run start      # Start production server
 npm run migrate    # Run database migrations
+```
+
+## API Gateway Architecture (DECIDED)
+**Decision**: Custom API Gateway for better control and readability
+
+**Implementation**:
+```javascript
+// Custom API Gateway implementation
+class APIGateway {
+  constructor() {
+    this.routes = new Map();
+    this.middleware = [];
+  }
+
+  // Register service routes
+  registerService(serviceName, serviceUrl, routes) {
+    routes.forEach(route => {
+      const key = `${route.method}:${route.path}`;
+      this.routes.set(key, {
+        service: serviceName,
+        url: serviceUrl,
+        handler: route.handler,
+        requiresAuth: route.requiresAuth !== false,
+        rateLimit: route.rateLimit || 100
+      });
+    });
+  }
+
+  // Main gateway handler
+  async handleRequest(req, res) {
+    const key = `${req.method}:${req.path}`;
+    const route = this.routes.get(key);
+    
+    if (!route) {
+      return res.status(404).json({ error: 'Route not found' });
+    }
+    
+    // Apply middleware
+    for (const mw of this.middleware) {
+      const result = await mw(req, res, route);
+      if (result === false) return; // Middleware handled response
+    }
+    
+    // Forward to service
+    try {
+      const response = await fetch(`${route.url}${req.path}`, {
+        method: req.method,
+        headers: {
+          ...req.headers,
+          'X-Tenant-ID': req.tenantId,
+          'X-User-ID': req.userId
+        },
+        body: req.body ? JSON.stringify(req.body) : undefined
+      });
+      
+      const data = await response.json();
+      res.status(response.status).json(data);
+    } catch (error) {
+      console.error(`Gateway error for ${route.service}:`, error);
+      res.status(502).json({ error: 'Service unavailable' });
+    }
+  }
+}
+```
+
+## Caching Strategy (DECIDED)
+**Decision**: Smart caching with data-specific TTLs
+
+**Implementation**:
+```javascript
+class SmartCache {
+  constructor(redis) {
+    this.redis = redis;
+    this.ttls = {
+      // Real-time data - very short or no cache
+      appointment_availability: 10, // 10 seconds
+      current_appointments: 0, // No cache
+      
+      // Frequently accessed, changes occasionally
+      trainer_profile: 300, // 5 minutes
+      studio_info: 600, // 10 minutes
+      
+      // Historical/reporting data - longer cache
+      monthly_report: 1800, // 30 minutes
+      analytics_dashboard: 900, // 15 minutes
+      client_history: 600, // 10 minutes
+    };
+  }
+  
+  async get(key, dataType) {
+    const cached = await this.redis.get(key);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+    return null;
+  }
+  
+  async set(key, data, dataType) {
+    const ttl = this.ttls[dataType] || 300; // Default 5 min
+    if (ttl > 0) {
+      await this.redis.setex(key, ttl, JSON.stringify(data));
+    }
+  }
+  
+  // Cache invalidation for critical updates
+  async invalidate(pattern) {
+    const keys = await this.redis.keys(pattern);
+    if (keys.length > 0) {
+      await this.redis.del(...keys);
+    }
+  }
+}
+```
+
+## Payment Architecture (DECIDED)
+**Decision**: Abstraction layer supporting Stripe + Interac e-Transfer
+
+**Implementation**:
+```javascript
+// Payment provider abstraction
+class PaymentService {
+  constructor() {
+    this.providers = {
+      stripe: new StripeProvider(),
+      interac: new InteracProvider()
+    };
+    this.supportedCurrencies = ['CAD', 'USD'];
+  }
+  
+  async processPayment(params) {
+    const { amount, currency, method, metadata } = params;
+    
+    // Validate currency
+    if (!this.supportedCurrencies.includes(currency)) {
+      throw new Error(`Currency ${currency} not supported`);
+    }
+    
+    // Select provider based on method
+    const provider = method === 'etransfer' ? 'interac' : 'stripe';
+    
+    // Generate idempotency key
+    const idempotencyKey = this.generateIdempotencyKey(metadata);
+    
+    // Check if already processed
+    const existing = await this.checkIdempotency(idempotencyKey);
+    if (existing) return existing;
+    
+    // Process payment synchronously
+    const result = await this.providers[provider].process({
+      amount,
+      currency,
+      metadata,
+      idempotencyKey
+    });
+    
+    // Store result with idempotency key
+    await this.storePaymentResult(idempotencyKey, result);
+    
+    return result;
+  }
+  
+  generateIdempotencyKey(metadata) {
+    const data = `${metadata.userId}-${metadata.appointmentId}-${Date.now()}`;
+    return crypto.createHash('sha256').update(data).digest('hex');
+  }
+}
+
+// Interac e-Transfer provider
+class InteracProvider {
+  async process(params) {
+    // Implementation for Interac e-Transfer
+    // This would integrate with Canadian bank APIs
+    return {
+      id: 'etransfer_' + generateId(),
+      status: 'pending',
+      method: 'interac_etransfer',
+      amount: params.amount,
+      currency: params.currency,
+      reference: this.generateReference()
+    };
+  }
+  
+  generateReference() {
+    // Generate unique reference for e-transfer
+    return 'FIT' + Date.now().toString(36).toUpperCase();
+  }
+}
+```
+
+## Event Architecture with Future Stubs (DECIDED)
+**Decision**: Synchronous first with event interface stubs
+
+**Implementation**:
+```javascript
+// Event bus interface (stubbed for future)
+class EventBus {
+  constructor() {
+    this.syncMode = true; // Start in sync mode
+    this.handlers = new Map();
+  }
+  
+  // Register handler (for future use)
+  on(event, handler) {
+    if (!this.handlers.has(event)) {
+      this.handlers.set(event, []);
+    }
+    this.handlers.get(event).push(handler);
+  }
+  
+  // Publish event (currently synchronous)
+  async publish(event, data) {
+    if (this.syncMode) {
+      // In sync mode, just log for audit
+      await this.auditLog(event, data);
+      return;
+    }
+    
+    // Future: Queue to message broker
+    // await this.messageQueue.publish(event, data);
+  }
+  
+  // Audit log for all events
+  async auditLog(event, data) {
+    await db.query(
+      'INSERT INTO event_log (event_type, event_data, created_at) VALUES (?, ?, NOW())',
+      [event, JSON.stringify(data)]
+    );
+  }
+  
+  // Future migration method
+  async enableAsync() {
+    this.syncMode = false;
+    // Initialize message queue connection
+    // this.messageQueue = new MessageQueue();
+  }
+}
+
+// Usage remains same whether sync or async
+const eventBus = new EventBus();
+
+// In appointment service
+async function createAppointment(data) {
+  // Direct database write (strong consistency)
+  const appointment = await db.transaction(async (trx) => {
+    const appt = await trx.insert('appointments', data);
+    
+    // Publish event (currently just logs)
+    await eventBus.publish('appointment.created', {
+      appointmentId: appt.id,
+      trainerId: appt.trainer_id,
+      clientId: appt.client_id,
+      startTime: appt.start_time
+    });
+    
+    return appt;
+  });
+  
+  // Future handlers would process async
+  // - Send confirmation email
+  // - Update calendar
+  // - Notify trainer app
+  
+  return appointment;
+}
 ```
 
 ## Continuous Improvement
