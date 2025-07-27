@@ -1,0 +1,42 @@
+{
+  "version": "1.0.0",
+  "description": "Simplified pricing configuration - only includes enabled features",
+  "currency": "CAD",
+  
+  "comment": "This is a simplified template. Only add sections that are enabled in features.config.json",
+  
+  "subscriptionPlans": {
+    "comment": "Only if features.subscriptionPlans.enabled = true",
+    "starter": {
+      "monthlyFee": 29,
+      "includedBookings": 50,
+      "overageRate": 0.50
+    }
+  },
+  
+  "trialPackages": {
+    "comment": "Only if features.trialPackages.enabled = true",
+    "singleClass": {
+      "regularPrice": 25,
+      "trialPrice": 10
+    }
+  },
+  
+  "classPackages": {
+    "comment": "Only if features.classPackages.enabled = true",
+    "dropIn": {
+      "price": 30
+    },
+    "pack5": {
+      "price": 125,
+      "classes": 5
+    }
+  },
+  
+  "taxes": {
+    "comment": "Only if features.taxSystem.enabled = true",
+    "HST": {
+      "ON": 0.13
+    }
+  }
+}

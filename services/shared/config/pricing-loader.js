@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const logger = require('../utils/logger');
+const featureLoader = require('./feature-loader');
 
 class PricingConfigLoader {
   constructor() {
@@ -33,6 +34,9 @@ class PricingConfigLoader {
         this.config = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
       }
 
+      // Filter config based on enabled features
+      this.config = featureLoader.filterPricingConfig(this.config);
+      
       this.lastLoaded = Date.now();
       this.validateConfig();
       
@@ -92,33 +96,55 @@ class PricingConfigLoader {
    * Get subscription plan by ID
    */
   getSubscriptionPlan(planId) {
+    if (!featureLoader.isEnabled('subscriptionPlans')) {
+      return null;
+    }
     const config = this.get();
-    return config.subscriptionPlans[planId];
+    return config.subscriptionPlans?.[planId];
   }
 
   /**
    * Get trial package by ID
    */
   getTrialPackage(packageId) {
+    if (!featureLoader.isEnabled('trialPackages')) {
+      return null;
+    }
     const config = this.get();
-    return Object.values(config.trialPackages).find(pkg => pkg.id === packageId);
+    return config.trialPackages ? Object.values(config.trialPackages).find(pkg => pkg.id === packageId) : null;
   }
 
   /**
    * Calculate tax for a given amount and province
    */
   calculateTax(amount, province) {
+    if (!featureLoader.isEnabled('taxSystem')) {
+      return {
+        rate: 0,
+        amount: 0,
+        total: amount
+      };
+    }
+    
     const config = this.get();
     const taxes = config.taxes;
+    if (!taxes) {
+      return {
+        rate: 0,
+        amount: 0,
+        total: amount
+      };
+    }
+    
     let taxRate = 0;
 
     // GST/HST
-    if (taxes.HST[province]) {
+    if (taxes.HST?.[province]) {
       taxRate = taxes.HST[province];
-    } else if (taxes.GST.provinces.includes(province)) {
+    } else if (taxes.GST?.provinces?.includes(province)) {
       taxRate = taxes.GST.rate;
       // Add PST if applicable
-      if (taxes.PST[province]) {
+      if (taxes.PST?.[province]) {
         taxRate += taxes.PST[province];
       }
     }

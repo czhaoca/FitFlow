@@ -1,4 +1,5 @@
 const pricingLoader = require('./pricing-loader');
+const featureLoader = require('./feature-loader');
 
 /**
  * Central configuration module
@@ -7,7 +8,8 @@ const pricingLoader = require('./pricing-loader');
 class ConfigManager {
   constructor() {
     this.configs = {
-      pricing: pricingLoader
+      pricing: pricingLoader,
+      features: featureLoader
     };
   }
 
@@ -65,8 +67,51 @@ class ConfigManager {
    */
   getPublicConfig() {
     return {
-      pricing: this.configs.pricing.getPublicConfig()
+      pricing: this.configs.pricing.getPublicConfig(),
+      features: this.getEnabledFeatures()
     };
+  }
+  
+  /**
+   * Check if a feature is enabled
+   */
+  isFeatureEnabled(featurePath) {
+    return this.configs.features.isEnabled(featurePath);
+  }
+  
+  /**
+   * Get enabled features for public consumption
+   */
+  getEnabledFeatures() {
+    const features = this.configs.features.get().features;
+    const publicFeatures = {};
+    
+    // Only expose relevant feature flags to frontend
+    if (features.trialPackages?.enabled) {
+      publicFeatures.trialPackages = {
+        enabled: true,
+        packages: features.trialPackages.availablePackages
+      };
+    }
+    
+    if (features.membershipTiers?.enabled) {
+      publicFeatures.memberships = {
+        enabled: true,
+        tiers: features.membershipTiers.availableTiers,
+        features: features.membershipTiers.features
+      };
+    }
+    
+    if (features.classPackages?.enabled) {
+      publicFeatures.classPackages = {
+        enabled: true,
+        packages: features.classPackages.availablePackages
+      };
+    }
+    
+    publicFeatures.paymentMethods = this.configs.features.getEnabledPaymentMethods();
+    
+    return publicFeatures;
   }
 
   /**

@@ -1,0 +1,276 @@
+{
+  "version": "1.0.0",
+  "description": "Feature flags to enable/disable pricing and business features",
+  "lastUpdated": "2024-01-01",
+  
+  "features": {
+    "subscriptionPlans": {
+      "enabled": true,
+      "description": "SaaS subscription model for studios",
+      "availablePlans": {
+        "starter": true,
+        "professional": true,
+        "business": true,
+        "enterprise": true
+      }
+    },
+    
+    "trialPackages": {
+      "enabled": true,
+      "description": "Trial packages for new clients",
+      "availablePackages": {
+        "singleClass": true,
+        "weekUnlimited": true,
+        "twoWeekPass": false,
+        "monthDiscovery": false
+      },
+      "requirePayment": true,
+      "autoConversionReminders": true
+    },
+    
+    "membershipTiers": {
+      "enabled": true,
+      "description": "Monthly membership options",
+      "availableTiers": {
+        "basic": true,
+        "standard": true,
+        "premium": true,
+        "unlimited": true
+      },
+      "features": {
+        "rolloverClasses": true,
+        "guestPasses": true,
+        "priorityBooking": true,
+        "memberDiscounts": true
+      }
+    },
+    
+    "classPackages": {
+      "enabled": true,
+      "description": "Pre-paid class packages",
+      "availablePackages": {
+        "dropIn": true,
+        "pack5": true,
+        "pack10": true,
+        "pack20": true,
+        "pack50": false
+      },
+      "features": {
+        "packageSharing": false,
+        "packageTransfer": false,
+        "expiryExtensions": true
+      }
+    },
+    
+    "trainerCompensation": {
+      "enabled": true,
+      "description": "Trainer payment calculation",
+      "models": {
+        "percentageBased": true,
+        "fixedRate": true,
+        "tieredRates": true,
+        "bonusSystem": false
+      },
+      "features": {
+        "experienceLevels": true,
+        "specializations": false,
+        "performanceBonus": false
+      }
+    },
+    
+    "discounts": {
+      "enabled": true,
+      "description": "Discount system",
+      "types": {
+        "earlyBird": true,
+        "multiClass": true,
+        "student": true,
+        "senior": true,
+        "corporate": true,
+        "referral": true,
+        "loyalty": true,
+        "seasonal": true
+      },
+      "features": {
+        "stackableDiscounts": false,
+        "automaticApplication": true,
+        "expiringCodes": true
+      }
+    },
+    
+    "promotions": {
+      "enabled": true,
+      "description": "Promotional campaigns",
+      "types": {
+        "newClient": true,
+        "seasonal": true,
+        "flashSales": false,
+        "bundleDeals": false
+      }
+    },
+    
+    "lateFees": {
+      "enabled": true,
+      "description": "Cancellation and late booking fees",
+      "types": {
+        "cancellationFees": true,
+        "noShowFees": true,
+        "lastMinuteBookingFees": false,
+        "reschedulingFees": false
+      }
+    },
+    
+    "specialPrograms": {
+      "enabled": false,
+      "description": "Workshops and special programs",
+      "types": {
+        "workshops": true,
+        "intensives": true,
+        "teacherTraining": true,
+        "retreats": false
+      }
+    },
+    
+    "paymentMethods": {
+      "stripe": {
+        "enabled": true,
+        "features": {
+          "creditCard": true,
+          "bankAccount": false,
+          "walletPay": true,
+          "subscriptions": true,
+          "paymentPlans": false
+        }
+      },
+      "interac": {
+        "enabled": true,
+        "autoReconciliation": false
+      },
+      "cash": {
+        "enabled": true,
+        "requiresReceipt": true
+      },
+      "cheque": {
+        "enabled": false
+      }
+    },
+    
+    "taxSystem": {
+      "enabled": true,
+      "description": "Tax calculation system",
+      "canadianTaxes": {
+        "GST": true,
+        "PST": true,
+        "HST": true,
+        "QST": true
+      },
+      "features": {
+        "multiJurisdiction": false,
+        "taxExemptions": false,
+        "automaticRemittance": false
+      }
+    },
+    
+    "multiLocation": {
+      "enabled": true,
+      "description": "Multi-studio support",
+      "features": {
+        "sharedMemberships": true,
+        "consolidatedBilling": true,
+        "crossLocationBooking": true,
+        "locationSpecificPricing": false
+      }
+    },
+    
+    "analytics": {
+      "enabled": true,
+      "description": "Business analytics and reporting",
+      "features": {
+        "revenueReports": true,
+        "utilizationReports": true,
+        "clientRetention": true,
+        "trainerPerformance": true,
+        "customReports": false
+      }
+    },
+    
+    "integrations": {
+      "enabled": true,
+      "description": "Third-party integrations",
+      "available": {
+        "googleCalendar": true,
+        "mailchimp": false,
+        "quickbooks": false,
+        "xero": false,
+        "zoom": true,
+        "instagram": false
+      }
+    },
+    
+    "clientFeatures": {
+      "enabled": true,
+      "description": "Client-facing features",
+      "features": {
+        "onlineBooking": true,
+        "mobileApp": false,
+        "waitlist": true,
+        "favorites": true,
+        "socialSharing": false,
+        "reviews": false,
+        "referralProgram": true
+      }
+    },
+    
+    "automations": {
+      "enabled": true,
+      "description": "Automated workflows",
+      "features": {
+        "welcomeEmails": true,
+        "appointmentReminders": true,
+        "followUpCampaigns": true,
+        "birthdayGreetings": false,
+        "reEngagementCampaigns": true,
+        "reviewRequests": false
+      }
+    },
+    
+    "compliance": {
+      "enabled": true,
+      "description": "Compliance and legal features",
+      "features": {
+        "digitalWaivers": true,
+        "medicalClearance": true,
+        "ageVerification": true,
+        "dataRetention": true,
+        "auditLogs": true,
+        "gdprCompliance": false,
+        "hipaaCompliance": true
+      }
+    }
+  },
+  
+  "businessRules": {
+    "minimumBookingWindow": 2,
+    "maximumBookingWindow": 30,
+    "cancellationWindow": 24,
+    "sessionDuration": [30, 45, 60, 75, 90, 120],
+    "businessHours": {
+      "monday": { "open": "06:00", "close": "21:00" },
+      "tuesday": { "open": "06:00", "close": "21:00" },
+      "wednesday": { "open": "06:00", "close": "21:00" },
+      "thursday": { "open": "06:00", "close": "21:00" },
+      "friday": { "open": "06:00", "close": "21:00" },
+      "saturday": { "open": "08:00", "close": "18:00" },
+      "sunday": { "open": "08:00", "close": "18:00" }
+    }
+  },
+  
+  "regionalization": {
+    "defaultCountry": "CA",
+    "defaultCurrency": "CAD",
+    "defaultLanguage": "en",
+    "supportedLanguages": ["en", "fr"],
+    "dateFormat": "YYYY-MM-DD",
+    "timeFormat": "24h"
+  }
+}
