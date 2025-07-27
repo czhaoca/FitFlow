@@ -1,0 +1,343 @@
+{
+  "version": "1.0.0",
+  "currency": "CAD",
+  "lastUpdated": "2024-01-01",
+  "description": "FitFlow pricing configuration template. Copy this to pricing.config.json and customize values.",
+  
+  "subscriptionPlans": {
+    "starter": {
+      "name": "Starter",
+      "description": "Perfect for independent trainers",
+      "monthlyFee": 29,
+      "includedBookings": 50,
+      "overageRate": 0.50,
+      "processingRate": 0.029,
+      "transactionFee": 0.30,
+      "maxTrainers": 1,
+      "features": [
+        "Basic scheduling",
+        "Payment processing",
+        "Client management",
+        "Email notifications"
+      ]
+    },
+    "professional": {
+      "name": "Professional",
+      "description": "For small studios",
+      "monthlyFee": 99,
+      "includedBookings": 300,
+      "overageRate": 0.35,
+      "processingRate": 0.027,
+      "transactionFee": 0.30,
+      "maxTrainers": 5,
+      "features": [
+        "Everything in Starter",
+        "Multiple trainers",
+        "Advanced reporting",
+        "SMS notifications",
+        "Custom branding"
+      ]
+    },
+    "business": {
+      "name": "Business",
+      "description": "For growing studios",
+      "monthlyFee": 299,
+      "includedBookings": 1000,
+      "overageRate": 0.25,
+      "processingRate": 0.025,
+      "transactionFee": 0.30,
+      "maxTrainers": 20,
+      "features": [
+        "Everything in Professional",
+        "Unlimited integrations",
+        "Priority support",
+        "Advanced analytics",
+        "API access"
+      ]
+    },
+    "enterprise": {
+      "name": "Enterprise",
+      "description": "For large studios and chains",
+      "monthlyFee": 599,
+      "customPricing": true,
+      "includedBookings": -1,
+      "overageRate": 0,
+      "processingRate": 0.023,
+      "transactionFee": 0.30,
+      "maxTrainers": -1,
+      "features": [
+        "Everything in Business",
+        "Unlimited trainers",
+        "Custom features",
+        "Dedicated support",
+        "SLA guarantee",
+        "Multi-location support"
+      ]
+    }
+  },
+  
+  "trialPackages": {
+    "singleClass": {
+      "id": "trial-single",
+      "name": "Single Class Trial",
+      "description": "Try any one class",
+      "regularPrice": 25,
+      "trialPrice": 10,
+      "classes": 1,
+      "validityDays": 7,
+      "durationValue": 1,
+      "durationUnit": "classes"
+    },
+    "weekUnlimited": {
+      "id": "trial-week",
+      "name": "One Week Unlimited",
+      "description": "Unlimited classes for 7 days",
+      "regularPrice": 75,
+      "trialPrice": 25,
+      "classes": -1,
+      "validityDays": 14,
+      "durationValue": 7,
+      "durationUnit": "days"
+    },
+    "twoWeekPass": {
+      "id": "trial-two-week",
+      "name": "Two Week Pass",
+      "description": "Up to 5 classes in 14 days",
+      "regularPrice": 100,
+      "trialPrice": 40,
+      "classes": 5,
+      "validityDays": 21,
+      "durationValue": 14,
+      "durationUnit": "days"
+    },
+    "monthDiscovery": {
+      "id": "trial-month",
+      "name": "Discovery Month",
+      "description": "Unlimited classes for 30 days",
+      "regularPrice": 150,
+      "trialPrice": 59,
+      "classes": -1,
+      "validityDays": 35,
+      "durationValue": 30,
+      "durationUnit": "days"
+    }
+  },
+  
+  "trainerCompensation": {
+    "default": {
+      "groupClass": {
+        "employee": 0.50,
+        "contractor": 0.70,
+        "trialClass": 25,
+        "minimumRate": 20
+      },
+      "privateSession": {
+        "employee": 0.60,
+        "contractor": 0.80,
+        "trialSession": 40,
+        "minimumRate": 50
+      },
+      "workshop": {
+        "employee": 0.55,
+        "contractor": 0.75,
+        "minimumRate": 100
+      }
+    },
+    "customRates": {
+      "seniorTrainer": {
+        "groupClass": 0.60,
+        "privateSession": 0.70,
+        "yearsExperienceRequired": 5
+      },
+      "masterTrainer": {
+        "groupClass": 0.65,
+        "privateSession": 0.75,
+        "certificationsRequired": ["master_certification"]
+      }
+    }
+  },
+  
+  "studioFees": {
+    "commissionRates": {
+      "default": 0.20,
+      "premium": 0.15,
+      "exclusive": 0.10
+    },
+    "facilityFees": {
+      "groupClassRoom": 50,
+      "privateRoom": 30,
+      "equipmentUsage": 10
+    }
+  },
+  
+  "paymentProcessing": {
+    "stripe": {
+      "baseRate": 0.029,
+      "transactionFee": 0.30,
+      "internationalRate": 0.039,
+      "currencyConversionRate": 0.01,
+      "disputeFee": 15.00
+    },
+    "interac": {
+      "flatFee": 0.50,
+      "available": true
+    },
+    "cash": {
+      "acceptanceFee": 0,
+      "available": true
+    }
+  },
+  
+  "taxes": {
+    "GST": {
+      "rate": 0.05,
+      "provinces": ["AB", "BC", "MB", "NT", "NU", "QC", "SK", "YT"]
+    },
+    "PST": {
+      "BC": 0.07,
+      "MB": 0.07,
+      "SK": 0.06
+    },
+    "HST": {
+      "ON": 0.13,
+      "NB": 0.15,
+      "NL": 0.15,
+      "NS": 0.15,
+      "PE": 0.15
+    }
+  },
+  
+  "discounts": {
+    "earlyBird": {
+      "percentage": 0.10,
+      "daysInAdvance": 7
+    },
+    "multiClass": {
+      "5classes": 0.05,
+      "10classes": 0.10,
+      "20classes": 0.15
+    },
+    "referral": {
+      "referrer": 15,
+      "referee": 0.20
+    },
+    "student": 0.15,
+    "senior": 0.15,
+    "corporate": 0.20
+  },
+  
+  "lateFees": {
+    "cancellation": {
+      "24hours": 0,
+      "12hours": 0.50,
+      "noShow": 1.00
+    },
+    "booking": {
+      "lastMinute": 5
+    }
+  },
+  
+  "membershipTiers": {
+    "basic": {
+      "name": "Basic Membership",
+      "monthlyFee": 99,
+      "classesPerMonth": 8,
+      "rolloverClasses": 2,
+      "guestPasses": 0,
+      "bookingWindow": 7
+    },
+    "standard": {
+      "name": "Standard Membership",
+      "monthlyFee": 149,
+      "classesPerMonth": 12,
+      "rolloverClasses": 4,
+      "guestPasses": 1,
+      "bookingWindow": 14
+    },
+    "premium": {
+      "name": "Premium Membership",
+      "monthlyFee": 199,
+      "classesPerMonth": 20,
+      "rolloverClasses": 6,
+      "guestPasses": 2,
+      "bookingWindow": 21
+    },
+    "unlimited": {
+      "name": "Unlimited Membership",
+      "monthlyFee": 299,
+      "classesPerMonth": -1,
+      "rolloverClasses": 0,
+      "guestPasses": 4,
+      "bookingWindow": 30
+    }
+  },
+  
+  "classPackages": {
+    "drop_in": {
+      "name": "Drop-in Class",
+      "classes": 1,
+      "price": 30,
+      "validityDays": 7
+    },
+    "pack_5": {
+      "name": "5 Class Pack",
+      "classes": 5,
+      "price": 125,
+      "validityDays": 60,
+      "pricePerClass": 25
+    },
+    "pack_10": {
+      "name": "10 Class Pack",
+      "classes": 10,
+      "price": 220,
+      "validityDays": 90,
+      "pricePerClass": 22
+    },
+    "pack_20": {
+      "name": "20 Class Pack",
+      "classes": 20,
+      "price": 400,
+      "validityDays": 120,
+      "pricePerClass": 20
+    }
+  },
+  
+  "specialPrograms": {
+    "beginnerSeries": {
+      "name": "Beginner Series",
+      "sessions": 6,
+      "price": 120,
+      "duration": "6 weeks"
+    },
+    "intensiveWorkshop": {
+      "name": "Weekend Intensive",
+      "hours": 8,
+      "price": 150,
+      "includesMaterials": true
+    },
+    "teacherTraining": {
+      "name": "Teacher Training",
+      "hours": 200,
+      "price": 2500,
+      "duration": "3 months",
+      "certification": true
+    }
+  },
+  
+  "promotions": {
+    "newClient": {
+      "firstMonthDiscount": 0.50,
+      "referralBonus": 25
+    },
+    "seasonal": {
+      "summerSpecial": 0.20,
+      "newYear": 0.30,
+      "blackFriday": 0.40
+    },
+    "loyalty": {
+      "6months": 0.05,
+      "12months": 0.10,
+      "24months": 0.15
+    }
+  }
+}

@@ -1,6 +1,7 @@
 const { stripe, STRIPE_CONFIG } = require('../config/stripe');
 const logger = require('../utils/logger');
 const db = require('../utils/database');
+const config = require('../../shared/config');
 
 class StripeService {
   /**

@@ -14,6 +14,13 @@ lerna-debug.log*
 .env.production.local
 *.env
 
+# Configuration files with sensitive data
+config/pricing.config.json
+config/tax.config.json
+config/payment.config.json
+config/*.config.json
+!config/*.config.template.json
+
 # IDE
 .vscode/
 .idea/
