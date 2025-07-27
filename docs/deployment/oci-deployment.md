@@ -15,13 +15,16 @@ This guide covers deploying FitFlow on Oracle Cloud Infrastructure (OCI) Free Ti
 - **OS**: Ubuntu 22.04 LTS
 - **Region**: Canada Southeast (Toronto) - ca-toronto-1
 
-#### 2. Autonomous Database
-- **Type**: Autonomous Transaction Processing (ATP)
-- **Storage**: 20 GB
-- **OCPU**: Auto-scaling
-- **Version**: 19c
-- **Workload Type**: Transaction Processing
-- **Access**: Secure connections only (mTLS)
+#### 2. MySQL HeatWave
+- **Type**: MySQL Database Service with HeatWave
+- **Storage**: 50 GB (Free Tier)
+- **Shape**: MySQL.VM.Standard.E3.1.8GB
+- **Version**: MySQL 8.0
+- **Features**: 
+  - In-memory query acceleration
+  - Built-in machine learning
+  - Real-time analytics
+- **Portability**: Compatible with AWS RDS MySQL, Azure Database for MySQL, Google Cloud SQL
 
 #### 3. Object Storage
 - **Namespace**: Your tenancy namespace
@@ -78,39 +81,66 @@ sudo npm install -g pm2
 
 ## Database Setup
 
-### OCI Autonomous Database Configuration
+### MySQL HeatWave Configuration
 
-1. **Create Database Wallet**:
+1. **Create MySQL HeatWave Instance**:
    ```bash
-   # Download wallet from OCI Console
-   # Extract to secure location
-   mkdir -p /home/cloudpanel/wallets/fitflow
-   unzip Wallet_FITFLOWDEV.zip -d /home/cloudpanel/wallets/fitflow/
+   # Via OCI Console or CLI
+   oci mysql db-system create \
+     --compartment-id <compartment-ocid> \
+     --shape-name "MySQL.VM.Standard.E3.1.8GB" \
+     --subnet-id <subnet-ocid> \
+     --admin-username admin \
+     --admin-password <secure-password> \
+     --data-storage-size-in-gbs 50 \
+     --is-highly-available false \
+     --availability-domain <ad-name>
    ```
 
-2. **Configure TNS**:
+2. **Enable HeatWave Cluster** (Optional for analytics):
    ```bash
-   export TNS_ADMIN=/home/cloudpanel/wallets/fitflow
+   # Add HeatWave cluster for real-time analytics
+   oci mysql heat-wave-cluster create \
+     --db-system-id <mysql-db-system-id> \
+     --shape-name "HeatWave.VM.Standard.E3" \
+     --cluster-size 1
    ```
 
-3. **Database Schema Migration**:
+3. **Connect to MySQL**:
+   ```bash
+   # Standard MySQL connection
+   mysql -h <mysql-endpoint> -u admin -p fitflow
+   
+   # Or using MySQL Shell
+   mysqlsh admin@<mysql-endpoint>:3306/fitflow
+   ```
+
+### Database Schema Setup
+
+1. **Create Database and User**:
    ```sql
-   -- Connect to database using SQL Developer or SQLcl
-   -- Run schema creation scripts (converted from PostgreSQL)
+   CREATE DATABASE IF NOT EXISTS fitflow;
+   CREATE USER 'fitflow_app'@'%' IDENTIFIED BY '<secure-password>';
+   GRANT ALL PRIVILEGES ON fitflow.* TO 'fitflow_app'@'%';
+   FLUSH PRIVILEGES;
    ```
 
-### PostgreSQL to Oracle Migration Notes
+2. **PostgreSQL to MySQL Migration Notes**:
+   - `UUID` → `CHAR(36)` with UUID() function
+   - `JSONB` → `JSON` native type (MySQL 5.7+)
+   - `BOOLEAN` → `BOOLEAN` or `TINYINT(1)`
+   - `SERIAL` → `AUTO_INCREMENT`
+   - `NOW()` → `NOW()` (compatible)
+   - Arrays → JSON arrays
 
-1. **Data Types Mapping**:
-   - `UUID` → `RAW(16)` with custom function
-   - `JSONB` → `JSON` or `CLOB` with JSON constraints
-   - `BOOLEAN` → `NUMBER(1)` with check constraint
-   - `SERIAL` → `NUMBER` with sequence
+### Cloud Portability Benefits
 
-2. **Function Replacements**:
-   - `gen_random_uuid()` → Custom PL/SQL function
-   - `NOW()` → `SYSTIMESTAMP`
-   - Array types → Nested tables or JSON
+MySQL HeatWave provides excellent portability:
+
+1. **AWS Migration**: Direct compatibility with Amazon RDS for MySQL
+2. **Azure Migration**: Works with Azure Database for MySQL
+3. **Google Cloud**: Compatible with Cloud SQL for MySQL
+4. **On-Premise**: Standard MySQL 8.0 compatibility
 
 ## Application Deployment
 
@@ -123,11 +153,13 @@ Create `.env` files for each service:
 NODE_ENV=development
 PORT=3001
 
-# OCI Autonomous Database
-DB_USER=FITFLOW_APP
+# MySQL HeatWave Connection
+DB_HOST=<mysql-endpoint>
+DB_PORT=3306
+DB_USER=fitflow_app
 DB_PASSWORD=your_secure_password
-DB_CONNECTION_STRING=fitflowdev_high
-TNS_ADMIN=/home/cloudpanel/wallets/fitflow
+DB_NAME=fitflow
+DB_SSL_CA=/etc/ssl/certs/ca-certificates.crt
 
 # Redis (CloudPanel)
 REDIS_URL=redis://localhost:6379

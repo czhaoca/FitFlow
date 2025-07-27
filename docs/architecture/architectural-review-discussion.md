@@ -108,11 +108,16 @@ sudo apt install postgresql-14
 - **Pros**: No compatibility issues, familiar tooling
 - **Cons**: Manual backup management, no auto-scaling
 
-**Option C: Migrate to OCI MySQL HeatWave**
-- Free tier available (similar to ATP)
-- Better PostgreSQL compatibility than Oracle
-- **Pros**: Managed service, good performance
-- **Cons**: Still requires some query modifications
+**Option C: Migrate to MySQL HeatWave** ✅ **SELECTED**
+- Free tier available (50GB storage)
+- Excellent cloud portability
+- **Pros**: 
+  - Direct compatibility with AWS RDS MySQL, Azure Database for MySQL, Google Cloud SQL
+  - Managed service with automated backups
+  - HeatWave analytics for real-time insights
+  - Standard MySQL 8.0 - widely supported
+  - Better long-term portability
+- **Cons**: Minor syntax differences from PostgreSQL
 
 **Discussion Points:**
 1. Is there a specific reason for choosing Oracle ATP?
