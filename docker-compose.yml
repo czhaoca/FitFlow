@@ -21,29 +21,32 @@ services:
     networks:
       - fitflow-network
     restart: unless-stopped
+    profiles:
+      - gateway
 
-  # PostgreSQL Database
-  postgres:
-    image: postgres:16-alpine
-    container_name: fitflow-postgres
+  # MySQL Database (HeatWave compatible)
+  mysql:
+    image: mysql:8.0
+    container_name: fitflow-mysql
     environment:
-      POSTGRES_DB: ${DB_NAME:-fitflow}
-      POSTGRES_USER: ${DB_USER:-fitflow}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-fitflow}
-      PGDATA: /var/lib/postgresql/data/pgdata
+      MYSQL_DATABASE: ${DB_NAME:-fitflow}
+      MYSQL_USER: ${DB_USER:-fitflow}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-fitflow}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-fitflow_root}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${DB_PORT:-3306}:3306"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - mysql-data:/var/lib/mysql
+      - ./scripts/init-db-mysql.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - fitflow-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-fitflow}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-fitflow_root}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    command: --default-authentication-plugin=mysql_native_password
 
   # Redis Cache & Queue
   redis:
@@ -73,12 +76,18 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 3001
-      DB_URL: postgresql://${DB_USER:-fitflow}:${DB_PASSWORD:-fitflow}@postgres:5432/${DB_NAME:-fitflow}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-fitflow}
+      DB_PASSWORD: ${DB_PASSWORD:-fitflow}
+      DB_NAME: ${DB_NAME:-fitflow}
       REDIS_URL: redis://default:${REDIS_PASSWORD:-fitflow}@redis:6379
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+    ports:
+      - "3001:3001"
     depends_on:
-      postgres:
+      mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -86,107 +95,27 @@ services:
       - fitflow-network
     restart: unless-stopped
 
-  # User Service
-  user-service:
+  # Payment Service
+  payment-service:
     build:
-      context: ./services/user
+      context: ./services/payment
       dockerfile: Dockerfile
       target: ${BUILD_TARGET:-development}
-    container_name: fitflow-user
+    container_name: fitflow-payment
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 3002
-      DB_URL: postgresql://${DB_USER:-fitflow}:${DB_PASSWORD:-fitflow}@postgres:5432/${DB_NAME:-fitflow}
-      REDIS_URL: redis://default:${REDIS_PASSWORD:-fitflow}@redis:6379
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-fitflow}
+      DB_PASSWORD: ${DB_PASSWORD:-fitflow}
+      DB_NAME: ${DB_NAME:-fitflow}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+    ports:
+      - "3002:3002"
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - fitflow-network
-    restart: unless-stopped
-
-  # Scheduling Service
-  scheduling-service:
-    build:
-      context: ./services/scheduling
-      dockerfile: Dockerfile
-      target: ${BUILD_TARGET:-development}
-    container_name: fitflow-scheduling
-    environment:
-      NODE_ENV: ${NODE_ENV:-development}
-      PORT: 3003
-      DB_URL: postgresql://${DB_USER:-fitflow}:${DB_PASSWORD:-fitflow}@postgres:5432/${DB_NAME:-fitflow}
-      REDIS_URL: redis://default:${REDIS_PASSWORD:-fitflow}@redis:6379
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - fitflow-network
-    restart: unless-stopped
-
-  # Session Service
-  session-service:
-    build:
-      context: ./services/session
-      dockerfile: Dockerfile
-      target: ${BUILD_TARGET:-development}
-    container_name: fitflow-session
-    environment:
-      NODE_ENV: ${NODE_ENV:-development}
-      PORT: 3004
-      DB_URL: postgresql://${DB_USER:-fitflow}:${DB_PASSWORD:-fitflow}@postgres:5432/${DB_NAME:-fitflow}
-      REDIS_URL: redis://default:${REDIS_PASSWORD:-fitflow}@redis:6379
-      AI_API_KEY: ${AI_API_KEY}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - fitflow-network
-    restart: unless-stopped
-
-  # Financial Service
-  financial-service:
-    build:
-      context: ./services/financial
-      dockerfile: Dockerfile
-      target: ${BUILD_TARGET:-development}
-    container_name: fitflow-financial
-    environment:
-      NODE_ENV: ${NODE_ENV:-development}
-      PORT: 3005
-      DB_URL: postgresql://${DB_USER:-fitflow}:${DB_PASSWORD:-fitflow}@postgres:5432/${DB_NAME:-fitflow}
-      REDIS_URL: redis://default:${REDIS_PASSWORD:-fitflow}@redis:6379
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - fitflow-network
-    restart: unless-stopped
-
-  # Studio Service
-  studio-service:
-    build:
-      context: ./services/studio
-      dockerfile: Dockerfile
-      target: ${BUILD_TARGET:-development}
-    container_name: fitflow-studio
-    environment:
-      NODE_ENV: ${NODE_ENV:-development}
-      PORT: 3006
-      DB_URL: postgresql://${DB_USER:-fitflow}:${DB_PASSWORD:-fitflow}@postgres:5432/${DB_NAME:-fitflow}
-      REDIS_URL: redis://default:${REDIS_PASSWORD:-fitflow}@redis:6379
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
+      mysql:
         condition: service_healthy
     networks:
       - fitflow-network
@@ -201,74 +130,28 @@ services:
     container_name: fitflow-notification
     environment:
       NODE_ENV: ${NODE_ENV:-development}
-      PORT: 3007
+      PORT: 3003
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-fitflow}
+      DB_PASSWORD: ${DB_PASSWORD:-fitflow}
+      DB_NAME: ${DB_NAME:-fitflow}
       REDIS_URL: redis://default:${REDIS_PASSWORD:-fitflow}@redis:6379
       EMAIL_HOST: ${EMAIL_HOST}
       EMAIL_PORT: ${EMAIL_PORT}
       EMAIL_USER: ${EMAIL_USER}
       EMAIL_PASSWORD: ${EMAIL_PASSWORD}
-      SMS_API_KEY: ${SMS_API_KEY}
-    depends_on:
-      redis:
-        condition: service_healthy
-    networks:
-      - fitflow-network
-    restart: unless-stopped
-
-  # Analytics Service
-  analytics-service:
-    build:
-      context: ./services/analytics
-      dockerfile: Dockerfile
-      target: ${BUILD_TARGET:-development}
-    container_name: fitflow-analytics
-    environment:
-      NODE_ENV: ${NODE_ENV:-development}
-      PORT: 3008
-      DB_URL: postgresql://${DB_USER:-fitflow}:${DB_PASSWORD:-fitflow}@postgres:5432/${DB_NAME:-fitflow}
-      REDIS_URL: redis://default:${REDIS_PASSWORD:-fitflow}@redis:6379
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - fitflow-network
-    restart: unless-stopped
-
-  # Storage Service (S3-compatible)
-  storage-service:
-    build:
-      context: ./services/storage
-      dockerfile: Dockerfile
-      target: ${BUILD_TARGET:-development}
-    container_name: fitflow-storage
-    environment:
-      NODE_ENV: ${NODE_ENV:-development}
-      PORT: 3009
-      S3_ENDPOINT: ${S3_ENDPOINT}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      S3_SECRET_KEY: ${S3_SECRET_KEY}
-      S3_BUCKET: ${S3_BUCKET:-fitflow}
-      S3_REGION: ${S3_REGION:-us-east-1}
-    networks:
-      - fitflow-network
-    restart: unless-stopped
-
-  # Frontend Web App
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: ${BUILD_TARGET:-development}
-    container_name: fitflow-frontend
-    environment:
-      NODE_ENV: ${NODE_ENV:-development}
-      NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:8000}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "3003:3003"
     depends_on:
-      - gateway
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - fitflow-network
     restart: unless-stopped
@@ -295,5 +178,5 @@ networks:
     driver: bridge
 
 volumes:
-  postgres-data:
+  mysql-data:
   redis-data:
