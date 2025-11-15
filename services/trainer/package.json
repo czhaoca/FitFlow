@@ -1,7 +1,7 @@
 {
-  "name": "@fitflow/auth-service",
+  "name": "@fitflow/trainer-service",
   "version": "1.0.0",
-  "description": "FitFlow Authentication Service",
+  "description": "FitFlow Trainer Management Service",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -20,14 +20,7 @@
     "helmet": "^7.1.0",
     "express-rate-limit": "^7.1.5",
     "uuid": "^9.0.1",
-    "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
-    "speakeasy": "^2.0.0",
-    "qrcode": "^1.5.3",
-    "nodemailer": "^6.9.7",
-    "redis": "^4.6.10",
-    "@simplewebauthn/server": "^8.3.5",
-    "@simplewebauthn/browser": "^8.3.4"
+    "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.2",

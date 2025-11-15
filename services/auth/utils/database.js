@@ -1,22 +1,24 @@
-const { Pool } = require('pg');
+const { adapter } = require('../../shared/database/mysql-adapter');
 const logger = require('./logger');
 const redisClient = require('./redis');
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
-
 class Database {
+  constructor() {
+    this.adapter = adapter;
+  }
+
+  async initialize() {
+    await this.adapter.initialize();
+  }
+
   async query(text, params) {
     const start = Date.now();
     try {
-      const res = await pool.query(text, params);
+      // Convert PostgreSQL syntax to MySQL using adapter
+      const mysqlQuery = this.adapter.convertPostgreSQLToMySQL(text);
+      const res = await this.adapter.query(mysqlQuery, params);
       const duration = Date.now() - start;
-      logger.debug('Executed query', { text, duration, rows: res.rowCount });
+      logger.debug('Executed query', { text: mysqlQuery, duration, rows: res.rowCount });
       return res;
     } catch (error) {
       logger.error('Database query error', { error, text });
@@ -25,19 +27,16 @@ class Database {
   }
 
   async beginTransaction() {
-    const client = await pool.connect();
-    await client.query('BEGIN');
-    return client;
+    const connection = await this.adapter.beginTransaction();
+    return connection;
   }
 
-  async commitTransaction(client) {
-    await client.query('COMMIT');
-    client.release();
+  async commitTransaction(connection) {
+    await this.adapter.commit(connection);
   }
 
-  async rollbackTransaction(client) {
-    await client.query('ROLLBACK');
-    client.release();
+  async rollbackTransaction(connection) {
+    await this.adapter.rollback(connection);
   }
 
   // User operations

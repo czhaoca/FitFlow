@@ -1,6 +1,12 @@
 const mysql = require('mysql2/promise');
 const { v4: uuidv4 } = require('uuid');
-const logger = require('../utils/logger');
+// Try to load logger from shared utils, fallback to console
+let logger;
+try {
+  logger = require('../utils/logger');
+} catch (e) {
+  logger = console;
+}
 
 class MySQLAdapter {
   constructor() {
